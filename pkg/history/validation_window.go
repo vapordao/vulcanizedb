@@ -18,7 +18,7 @@ package history
 
 import (
 	"fmt"
-	log "github.com/sirupsen/logrus"
+	"github.com/sirupsen/logrus"
 	"github.com/vulcanize/vulcanizedb/pkg/core"
 )
 
@@ -34,7 +34,7 @@ func (window ValidationWindow) Size() int {
 func MakeValidationWindow(blockchain core.BlockChain, windowSize int) (ValidationWindow, error) {
 	upperBound, err := blockchain.LastBlock()
 	if err != nil {
-		log.Error("MakeValidationWindow: error getting LastBlock: ", err)
+		logrus.Error("MakeValidationWindow: error getting LastBlock: ", err)
 		return ValidationWindow{}, err
 	}
 	lowerBound := upperBound.Int64() - int64(windowSize)

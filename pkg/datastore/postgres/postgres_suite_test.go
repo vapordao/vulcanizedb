@@ -19,7 +19,7 @@ package postgres_test
 import (
 	"testing"
 
-	log "github.com/sirupsen/logrus"
+	"github.com/sirupsen/logrus"
 	"io/ioutil"
 
 	. "github.com/onsi/ginkgo"
@@ -27,7 +27,7 @@ import (
 )
 
 func init() {
-	log.SetOutput(ioutil.Discard)
+	logrus.SetOutput(ioutil.Discard)
 }
 
 func TestPostgres(t *testing.T) {

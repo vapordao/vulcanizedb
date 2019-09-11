@@ -21,7 +21,7 @@ import (
 	"github.com/vulcanize/vulcanizedb/pkg/config"
 	"time"
 
-	log "github.com/sirupsen/logrus"
+	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 
 	st "github.com/vulcanize/vulcanizedb/libraries/shared/transformer"
@@ -80,7 +80,7 @@ Requires a .toml config file:
 `,
 	Run: func(cmd *cobra.Command, args []string) {
 		SubCommand = cmd.CalledAs()
-		LogWithCommand = *log.WithField("SubCommand", SubCommand)
+		LogWithCommand = *logrus.WithField("SubCommand", SubCommand)
 		contractWatcher()
 	},
 }

@@ -17,7 +17,7 @@
 package cmd
 
 import (
-	log "github.com/sirupsen/logrus"
+	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 
 	"github.com/vulcanize/vulcanizedb/pkg/crypto"
@@ -40,7 +40,7 @@ var coldImportCmd = &cobra.Command{
 Geth must be synced over all of the desired blocks and must not be running in order to execute this command.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		SubCommand = cmd.CalledAs()
-		LogWithCommand = *log.WithField("SubCommand", SubCommand)
+		LogWithCommand = *logrus.WithField("SubCommand", SubCommand)
 		coldImport()
 	},
 }

@@ -23,7 +23,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/rpc"
-	log "github.com/sirupsen/logrus"
+	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
@@ -62,9 +62,9 @@ var rootCmd = &cobra.Command{
 }
 
 func Execute() {
-	log.Info("----- Starting vDB -----")
+	logrus.Info("----- Starting vDB -----")
 	if err := rootCmd.Execute(); err != nil {
-		log.Fatal(err)
+		logrus.Fatal(err)
 	}
 }
 
@@ -72,7 +72,7 @@ func initFuncs(cmd *cobra.Command, args []string) {
 	setViperConfigs()
 	logLvlErr := logLevel()
 	if logLvlErr != nil {
-		log.Fatal("Could not set log level: ", logLvlErr)
+		logrus.Fatal("Could not set log level: ", logLvlErr)
 	}
 
 }
@@ -93,15 +93,15 @@ func setViperConfigs() {
 }
 
 func logLevel() error {
-	lvl, err := log.ParseLevel(viper.GetString("log.level"))
+	lvl, err := logrus.ParseLevel(viper.GetString("log.level"))
 	if err != nil {
 		return err
 	}
-	log.SetLevel(lvl)
-	if lvl > log.InfoLevel {
-		log.SetReportCaller(true)
+	logrus.SetLevel(lvl)
+	if lvl > logrus.InfoLevel {
+		logrus.SetReportCaller(true)
 	}
-	log.Info("Log level set to ", lvl.String())
+	logrus.Info("Log level set to ", lvl.String())
 	return nil
 }
 
@@ -122,7 +122,7 @@ func init() {
 	rootCmd.PersistentFlags().String("filesystem-storageDiffsPath", "", "location of storage diffs csv file")
 	rootCmd.PersistentFlags().String("storageDiffs-source", "csv", "where to get the state diffs: csv or geth")
 	rootCmd.PersistentFlags().String("exporter-name", "exporter", "name of exporter plugin")
-	rootCmd.PersistentFlags().String("log-level", log.InfoLevel.String(), "Log level (trace, debug, info, warn, error, fatal, panic")
+	rootCmd.PersistentFlags().String("log-level", logrus.InfoLevel.String(), "Log level (trace, debug, info, warn, error, fatal, panic")
 
 	viper.BindPFlag("database.name", rootCmd.PersistentFlags().Lookup("database-name"))
 	viper.BindPFlag("database.port", rootCmd.PersistentFlags().Lookup("database-port"))
@@ -143,15 +143,15 @@ func initConfig() {
 	} else {
 		noConfigError := "No config file passed with --config flag"
 		fmt.Println("Error: ", noConfigError)
-		log.Fatal(noConfigError)
+		logrus.Fatal(noConfigError)
 	}
 
 	if err := viper.ReadInConfig(); err == nil {
-		log.Printf("Using config file: %s\n\n", viper.ConfigFileUsed())
+		logrus.Printf("Using config file: %s\n\n", viper.ConfigFileUsed())
 	} else {
 		invalidConfigError := "Couldn't read config file"
 		formattedError := fmt.Sprintf("%s: %s", invalidConfigError, err.Error())
-		log.Fatal(formattedError)
+		logrus.Fatal(formattedError)
 	}
 }
 

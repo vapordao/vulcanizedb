@@ -18,7 +18,7 @@ package history
 
 import (
 	"fmt"
-	log "github.com/sirupsen/logrus"
+	"github.com/sirupsen/logrus"
 
 	"github.com/vulcanize/vulcanizedb/pkg/core"
 	"github.com/vulcanize/vulcanizedb/pkg/datastore"
@@ -27,7 +27,7 @@ import (
 func PopulateMissingBlocks(blockchain core.BlockChain, blockRepository datastore.BlockRepository, startingBlockNumber int64) (int, error) {
 	lastBlock, err := blockchain.LastBlock()
 	if err != nil {
-		log.Error("PopulateMissingBlocks: error getting last block: ", err)
+		logrus.Error("PopulateMissingBlocks: error getting last block: ", err)
 		return 0, err
 	}
 	blockRange := blockRepository.MissingBlockNumbers(startingBlockNumber, lastBlock.Int64(), blockchain.Node().ID)
@@ -36,10 +36,10 @@ func PopulateMissingBlocks(blockchain core.BlockChain, blockRepository datastore
 		return 0, nil
 	}
 
-	log.Debug(getBlockRangeString(blockRange))
+	logrus.Debug(getBlockRangeString(blockRange))
 	_, err = RetrieveAndUpdateBlocks(blockchain, blockRepository, blockRange)
 	if err != nil {
-		log.Error("PopulateMissingBlocks: error gettings/updating blocks: ", err)
+		logrus.Error("PopulateMissingBlocks: error gettings/updating blocks: ", err)
 		return 0, err
 	}
 	return len(blockRange), nil
@@ -49,13 +49,13 @@ func RetrieveAndUpdateBlocks(blockchain core.BlockChain, blockRepository datasto
 	for _, blockNumber := range blockNumbers {
 		block, err := blockchain.GetBlockByNumber(blockNumber)
 		if err != nil {
-			log.Error("RetrieveAndUpdateBlocks: error getting block: ", err)
+			logrus.Error("RetrieveAndUpdateBlocks: error getting block: ", err)
 			return 0, err
 		}
 
 		_, err = blockRepository.CreateOrUpdateBlock(block)
 		if err != nil {
-			log.Error("RetrieveAndUpdateBlocks: error creating/updating block: ", err)
+			logrus.Error("RetrieveAndUpdateBlocks: error creating/updating block: ", err)
 			return 0, err
 		}
 
