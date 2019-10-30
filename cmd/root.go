@@ -47,7 +47,7 @@ var (
 	endingBlockNumber    int64
 	recheckHeadersArg    bool
 	SubCommand           string
-	LogWithCommand       log.Entry
+	LogWithCommand       logrus.Entry
 	storageDiffsSource   string
 )
 

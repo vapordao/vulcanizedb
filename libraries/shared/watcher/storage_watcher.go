@@ -25,6 +25,7 @@ import (
 	"github.com/vulcanize/vulcanizedb/libraries/shared/storage/utils"
 	"github.com/vulcanize/vulcanizedb/libraries/shared/transformer"
 	"github.com/vulcanize/vulcanizedb/pkg/datastore/postgres"
+	"strconv"
 	"time"
 )
 
@@ -93,7 +94,7 @@ func (storageWatcher StorageWatcher) processRow(diff utils.StorageDiff) {
 		}
 		return
 	}
-	logrus.Debug("Storage diff persisted at block height: " + strconv.Itoa(row.BlockHeight))
+	logrus.Debug("Storage diff persisted at block height: " + strconv.Itoa(diff.BlockHeight))
 }
 
 func (storageWatcher StorageWatcher) processQueue() {

@@ -127,7 +127,7 @@ func execute() {
 	if len(ethStorageInitializers) > 0 {
 		switch storageDiffsSource {
 		case "geth":
-			log.Debug("fetching storage diffs from geth pub sub")
+			logrus.Debug("fetching storage diffs from geth pub sub")
 			rpcClient, _ := getClients()
 			stateDiffStreamer := streamer.NewStateDiffStreamer(rpcClient)
 			payloadChan := make(chan statediff.Payload)
@@ -137,7 +137,7 @@ func execute() {
 			wg.Add(1)
 			go watchEthStorage(&sw, &wg)
 		default:
-			log.Debug("fetching storage diffs from csv")
+			logrus.Debug("fetching storage diffs from csv")
 			tailer := fs.FileTailer{Path: storageDiffsPath}
 			storageFetcher := fetcher.NewCsvTailStorageFetcher(tailer)
 			sw := watcher.NewStorageWatcher(storageFetcher, &db)
