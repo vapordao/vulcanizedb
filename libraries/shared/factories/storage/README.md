@@ -8,7 +8,7 @@ Assuming that you are running an ethereum node that is writing contract storage 
 The current approach for caching smart contract storage diffs assumes that you are running a node that is writing contract storage diffs to a CSV file.
 The CSV file is expected to have 5 columns: contract address, block hash, block number, storage key, storage value.
 
-We have [a branch on vulcanize/parity-ethereum](https://github.com/vulcanize/parity-ethereum/tree/watch-storage-diffs) that enables running a node that writes storage diffs this way.
+We have [a branch on makerdao/parity-ethereum](https://github.com/makerdao/parity-ethereum/tree/watch-storage-diffs) that enables running a node that writes storage diffs this way.
 
 Looking forward, we would like to isolate this assumption as much as possible.
 We may end up needing to read CSV data that is formatted differently, or reading data from a non-CSV source, and we do not want resulting changes to cascade throughout the codebase.
@@ -108,7 +108,7 @@ A database connection may be desired when keys in a mapping variable need to be 
 
 ```golang
 type Repository interface {
-	Create(blockNumber int, blockHash string, metadata shared.StorageValueMetadata, value interface{}) error
+	Create(diffID, headerID int64, metadata types.ValueMetadata, value interface{}) error
 	SetDB(db *postgres.DB)
 }
 ```
@@ -124,13 +124,13 @@ The `SetDB` function is required for the repository to connect to the database.
 
 ```golang
 type Transformer struct {
-	Address    common.Address
-	Mappings   storage_diffs.Mappings
-	Repository storage_diffs.Repository
+	HashedAddress     common.Hash
+	StorageKeysLookup KeysLookup
+	Repository        Repository
 }
 ```
 
-A new instance of the storage transformer is initialized with the contract-specific mappings and repository, as well as the contract's address.
+A new instance of the storage transformer is initialized with the contract-specific mappings and repository, as well as the contract's hashed address.
 The contract's address is included so that the watcher can query that value from the transformer in order to build up its mapping of addresses to transformers.
 
 ## Summary
