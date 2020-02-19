@@ -23,52 +23,41 @@ The event watcher is responsible for continuously fetching and delegating chunks
 
 Using the `compose` or `composeAndExecute` command, event watchers can be loaded with plugin event transformers and execute over them.
 
-### [Event Transformer](../staging/libraries/shared/transformer/event_transformer.go)
+### [Configured Transformer](../staging/libraries/shared/factories/event/transformer.go)
 
-The event transformer is responsible for converting event logs into more useful data objects and storing them in Postgres.
-The event transformer is composed of converter and repository interfaces and a config struct:
+The Configured transformer is responsible for converting event logs into more useful data objects and storing them in Postgres.
+The configured transformer is composed of a transformer interface and a config struct:
 ```go
-type EventTransformer struct {
-	Config     transformer.EventTransformerConfig
-	Converter  Converter
-	Repository Repository
+type ConfiguredTransformer struct {
+	Config      transformer.EventTransformerConfig
+	Transformer Transformer
+	DB          *postgres.DB
 }
 ```
 
-The event transformer executes over provided event logs at a given header.
+The transformer executes over provided event logs at a given header.
 
-In this process, the converter unpacks these logs into entities and then converts these entities 
+In this process, the transformer unpacks these logs into entities and then converts these entities 
 to their final db models. These models are then written to the Postgres db by the repository.
 
 ```go
-func (transformer Transformer) Execute(logs []types.Log, header core.Header, recheckHeaders constants.TransformerExecution) error {
-	transformerName := transformer.Config.TransformerName
-	config := transformer.Config
+func (ct ConfiguredTransformer) Execute(logs []core.EventLog) error {
+	transformerName := ct.Config.TransformerName
+	config := ct.Config
 
 	if len(logs) < 1 {
-		err := transformer.Repository.MarkHeaderChecked(header.Id)
-		if err != nil {
-			log.Printf("Error marking header as checked in %v: %v", transformerName, err)
-			return err
-		}
 		return nil
 	}
 
-	entities, err := transformer.Converter.ToEntities(config.ContractAbi, logs)
+	models, err := ct.Transformer.ToModels(config.ContractAbi, logs, ct.DB)
 	if err != nil {
-		log.Printf("Error converting logs to entities in %v: %v", transformerName, err)
+		logrus.Errorf("error converting entities to models in %v: %v", transformerName, err)
 		return err
 	}
 
-	models, err := transformer.Converter.ToModels(entities)
+	err = PersistModels(models, ct.DB)
 	if err != nil {
-		log.Printf("Error converting entities to models in %v: %v", transformerName, err)
-		return err
-	}
-
-	err = transformer.Repository.Create(header.Id, models)
-	if err != nil {
-		log.Printf("Error persisting %v record: %v", transformerName, err)
+		logrus.Errorf("error persisting %v record: %v", transformerName, err)
 		return err
 	}
 
@@ -149,13 +138,13 @@ type ExampleModel struct {
 }
 ```
 
-### Converter
+### Transformer
 
-The converter needs to satisfy the interface. One for unpacking logs into the custom defined entities, and
+The transformer needs to satisfy the interface. One for unpacking logs into the custom defined entities, and
 another for converting those entities to their final db models.
 
 ```go
-type Converter interface {
+type Transformer interface {
 	ToEntities(contractAbi string, ethLog []types.Log) ([]interface{}, error)
 	ToModels([]interface{}) ([]interface{}, error)
 }
@@ -163,9 +152,9 @@ type Converter interface {
 
 For the example event, this might look like:
 ```go
-type ExampleConverter struct{}
+type ExampleTransformer struct{}
 
-func (ExampleConverter) ToEntities(contractAbi string, ethLogs []types.Log) ([]interface{}, error) {
+func (ExampleTransformer) ToEntities(contractAbi string, ethLogs []types.Log) ([]interface{}, error) {
 	var entities []interface{}
 	for _, ethLog := range ethLogs {
 		entity := &ExampleEntity{}
@@ -192,7 +181,7 @@ func (ExampleConverter) ToEntities(contractAbi string, ethLogs []types.Log) ([]i
 	return entities, nil
 }
 
-func (converter ExampleConverter) ToModels(entities []interface{}) ([]interface{}, error) {
+func (ExampleTransformer) ToModels(entities []interface{}) ([]interface{}, error) {
 	var models []interface{}
 	for _, entity := range entities {
         entity, ok := entity.(ExampleModel)
