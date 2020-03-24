@@ -130,13 +130,13 @@ var _ = Describe("Geth RPC Storage Fetcher", func() {
 	})
 
 	It("adds errors to error channel if formatting the diff as a StateDiff object fails", func(done Done) {
-		accountDiffs := test_data.CreatedAccountDiffs
+		accountDiffs := test_data.UpdatedAccountDiffs
 		accountDiffs[0].Storage = []statediff.StorageDiff{test_data.StorageWithBadValue}
 
 		stateDiff := statediff.StateDiff{
 			BlockNumber:     test_data.BlockNumber,
 			BlockHash:       common.HexToHash(test_data.BlockHash),
-			CreatedAccounts: accountDiffs,
+			UpdatedAccounts: accountDiffs,
 		}
 
 		stateDiffRlp, err := rlp.EncodeToBytes(stateDiff)
