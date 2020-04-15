@@ -18,6 +18,7 @@ package storage
 
 import (
 	"database/sql"
+	"time"
 
 	"github.com/makerdao/vulcanizedb/libraries/shared/storage/types"
 	"github.com/makerdao/vulcanizedb/pkg/datastore/postgres"
@@ -44,6 +45,7 @@ func NewDiffRepository(db *postgres.DB) diffRepository {
 // CreateStorageDiff writes a raw storage diff to the database
 func (repository diffRepository) CreateStorageDiff(rawDiff types.RawDiff) (int64, error) {
 	var storageDiffID int64
+	start := time.Now()
 	row := repository.db.QueryRowx(`INSERT INTO public.storage_diff
 		(hashed_address, block_height, block_hash, storage_key, storage_value) VALUES ($1, $2, $3, $4, $5)
 		ON CONFLICT DO NOTHING RETURNING id`, rawDiff.HashedAddress.Bytes(), rawDiff.BlockHeight, rawDiff.BlockHash.Bytes(),
@@ -52,6 +54,8 @@ func (repository diffRepository) CreateStorageDiff(rawDiff types.RawDiff) (int64
 	if err != nil && err == sql.ErrNoRows {
 		return 0, ErrDuplicateDiff
 	}
+	elapsed := time.Since(start)
+	logrus.Info("Duration of CreateStorageDiff: ", elapsed, "diff ", rawDiff.BlockHeight, rawDiff.StorageKey)
 	return storageDiffID, err
 }
 
@@ -63,7 +67,10 @@ func (repository diffRepository) CreateBackFilledStorageValue(rawDiff types.RawD
 }
 
 func (repository diffRepository) GetNewDiffs(diffs chan types.PersistedDiff, errs chan error, done chan bool) {
+	startQuery := time.Now()
 	rows, queryErr := repository.db.Queryx(`SELECT * FROM public.storage_diff WHERE checked = false`)
+	elapsedQuery := time.Since(startQuery)
+	logrus.Info("Time it took to query for unchecked diffs", elapsedQuery)
 	if queryErr != nil {
 		logrus.Errorf("error getting unchecked storage diffs: %s", queryErr.Error())
 		if rows != nil {
@@ -78,6 +85,8 @@ func (repository diffRepository) GetNewDiffs(diffs chan types.PersistedDiff, err
 
 	if rows != nil {
 		for rows.Next() {
+			start := time.Now()
+
 			var diff types.PersistedDiff
 			scanErr := rows.StructScan(&diff)
 			if scanErr != nil {
@@ -88,6 +97,9 @@ func (repository diffRepository) GetNewDiffs(diffs chan types.PersistedDiff, err
 				}
 				errs <- scanErr
 			}
+			elapsed := time.Since(start)
+			logrus.Info("Diff being passed to diffs channel. Block height: ", diff.BlockHeight, "Storage Key:", diff.StorageKey)
+			logrus.Info("Elapsed time between rows.Next and sending diff: ", elapsed)
 			diffs <- diff
 		}
 	}

@@ -102,10 +102,12 @@ func (watcher StorageWatcher) transformDiffs() error {
 	for {
 		select {
 		case diff := <-diffs:
+			logrus.Info("Received a diff from the diffs channel: ", diff.BlockHeight, diff.StorageKey)
 			err := watcher.transformDiff(diff)
+			logrus.Info("Diff finished being transformed and inserted: ", diff.BlockHeight, diff.StorageKey, "time: ", time.Now())
 			if err != nil {
 				if err == sql.ErrNoRows || reflect.TypeOf(err) == reflect.TypeOf(types.ErrKeyNotFound{}) {
-					logrus.Tracef("error transforming diff: %s", err.Error())
+					logrus.Tracef("error transforming diff for block %d: %s", diff.BlockHeight, err.Error())
 				} else {
 					logrus.Infof("error transforming diff: %s", err.Error())
 				}
@@ -120,14 +122,17 @@ func (watcher StorageWatcher) transformDiffs() error {
 }
 
 func (watcher StorageWatcher) transformDiff(diff types.PersistedDiff) error {
+	start := time.Now()
 	t, watching := watcher.getTransformer(diff)
 	if !watching {
+		logrus.Info("NOT WATCHING THIS ADDRESS")
 		markCheckedErr := watcher.StorageDiffRepository.MarkChecked(diff.ID)
 		if markCheckedErr != nil {
 			return fmt.Errorf("error marking diff checked: %s", markCheckedErr.Error())
 		}
 		return nil
 	}
+	logrus.Info("transformer: ", t.GetContractAddress().Hex())
 
 	headerID, headerErr := watcher.getHeaderID(diff)
 	if headerErr != nil {
@@ -137,6 +142,7 @@ func (watcher StorageWatcher) transformDiff(diff types.PersistedDiff) error {
 			return fmt.Errorf("error getting header for diff: %s", headerErr.Error())
 		}
 	}
+	logrus.Info("got the header", headerID)
 	diff.HeaderID = headerID
 
 	executeErr := t.Execute(diff)
@@ -153,6 +159,8 @@ func (watcher StorageWatcher) transformDiff(diff types.PersistedDiff) error {
 		return fmt.Errorf("error marking diff checked: %s", markCheckedErr.Error())
 	}
 
+	elapsed := time.Since(start)
+	logrus.Info("Elapsed time of transformDiff: ", elapsed, " id: ", diff.ID, "key: ", diff.StorageKey)
 	return nil
 }
 
@@ -163,6 +171,7 @@ func (watcher StorageWatcher) getTransformer(diff types.PersistedDiff) (storage2
 
 func (watcher StorageWatcher) getHeaderID(diff types.PersistedDiff) (int64, error) {
 	header, getHeaderErr := watcher.HeaderRepository.GetHeader(int64(diff.BlockHeight))
+	logrus.Info("header", header)
 	if getHeaderErr != nil {
 		return 0, getHeaderErr
 	}

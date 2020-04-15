@@ -17,10 +17,13 @@
 package storage
 
 import (
+	"time"
+
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/makerdao/vulcanizedb/libraries/shared/storage"
 	"github.com/makerdao/vulcanizedb/libraries/shared/storage/types"
 	"github.com/makerdao/vulcanizedb/pkg/datastore/postgres"
+	"github.com/sirupsen/logrus"
 )
 
 type ITransformer interface {
@@ -64,11 +67,17 @@ func (transformer *Transformer) KeccakContractAddress() common.Hash {
 }
 
 func (transformer Transformer) Execute(diff types.PersistedDiff) error {
+	getMetadataStarted := time.Now()
 	metadata, lookupErr := transformer.StorageKeysLookup.Lookup(diff.StorageKey)
+	getMetadataElapsed := time.Since(getMetadataStarted)
+	logrus.Info("getting metadata elapsed: ", getMetadataElapsed)
 	if lookupErr != nil {
 		return lookupErr
 	}
+	decodeStarted := time.Now()
 	value, decodeErr := storage.Decode(diff, metadata)
+	decodedElapsed := time.Since(decodeStarted)
+	logrus.Info("decoding storage value elapsed: ", decodedElapsed)
 	if decodeErr != nil {
 		return decodeErr
 	}
