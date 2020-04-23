@@ -1,7 +1,6 @@
 package backfill_test
 
 import (
-	"database/sql"
 	"math/big"
 	"math/rand"
 	"strings"
@@ -12,45 +11,58 @@ import (
 	"github.com/makerdao/vulcanizedb/libraries/shared/mocks"
 	"github.com/makerdao/vulcanizedb/libraries/shared/storage/backfill"
 	"github.com/makerdao/vulcanizedb/libraries/shared/storage/types"
+	"github.com/makerdao/vulcanizedb/libraries/shared/test_data"
 	"github.com/makerdao/vulcanizedb/pkg/core"
 	"github.com/makerdao/vulcanizedb/pkg/fakes"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
 
-var _ = Describe("getStorageValue Command", func() {
+var _ = Describe("StorageValueLoader", func() {
 	var (
-		bc                             *fakes.MockBlockChain
-		keysLookupOne, keysLookupTwo   mocks.MockStorageKeysLookup
-		runner                         backfill.StorageValueLoader
-		initializerOne, initializerTwo storage.TransformerInitializer
-		initializers                   []storage.TransformerInitializer
-		keyOne, keyTwo                 common.Hash
-		valueOne, valueTwo             common.Hash
-		addressOne, addressTwo         common.Address
-		blockNumber                    int64
-		bigIntBlockNumber              *big.Int
-		fakeHeader                     core.Header
-		headerRepo                     fakes.MockHeaderRepository
-		diffRepo                       mocks.MockStorageDiffRepository
+		bc                                               *fakes.MockBlockChain
+		keysLookupOne, keysLookupTwo, keysLookupThree    mocks.MockStorageKeysLookup
+		runner                                           backfill.StorageValueLoader
+		initializerOne, initializerTwo, initializerThree storage.TransformerInitializer
+		initializers                                     []storage.TransformerInitializer
+		keyOne, keyTwo, keyThree                         common.Hash
+		valueOne, valueTwo, valueThree                   common.Hash
+		addressOne, addressTwo, addressThree             common.Address
+		blockOne, blockTwo                               int64
+		bigIntBlockOne, bigIntBlockTwo                   *big.Int
+		fakeHeader                                       core.Header
+		headerRepo                                       fakes.MockHeaderRepository
+		diffRepo                                         mocks.MockStorageDiffRepository
 	)
 
 	BeforeEach(func() {
 		bc = fakes.NewMockBlockChain()
 
+		blockOne = rand.Int63()
+		bigIntBlockOne = big.NewInt(blockOne)
+		blockTwo = blockOne + 1
+		bigIntBlockTwo = big.NewInt(blockTwo)
+
 		keysLookupOne = mocks.MockStorageKeysLookup{}
-		keyOne = common.Hash{1, 2, 3}
-		addressOne = fakes.FakeAddress
+		keyOne = test_data.FakeHash()
+		addressOne = test_data.FakeAddress()
 		keysLookupOne.KeysToReturn = []common.Hash{keyOne}
-		valueOne = common.BytesToHash([]byte{7, 8, 9})
-		bc.SetStorageValuesToReturn(addressOne, valueOne[:])
+		valueOne = test_data.FakeHash()
+		bc.SetStorageValuesToReturn(blockOne, addressOne, valueOne[:])
 
 		keysLookupTwo = mocks.MockStorageKeysLookup{}
-		keyTwo = common.Hash{4, 5, 6}
-		addressTwo = fakes.AnotherFakeAddress
+		keyTwo = test_data.FakeHash()
+		addressTwo = test_data.FakeAddress()
 		keysLookupTwo.KeysToReturn = []common.Hash{keyTwo}
-		valueTwo = common.BytesToHash([]byte{10, 11, 12})
-		bc.SetStorageValuesToReturn(addressTwo, valueTwo[:])
+		valueTwo = test_data.FakeHash()
+		bc.SetStorageValuesToReturn(blockOne, addressTwo, valueTwo[:])
+
+		keysLookupThree = mocks.MockStorageKeysLookup{}
+		keyThree = test_data.FakeHash()
+		addressThree = test_data.FakeAddress()
+		keysLookupThree.KeysToReturn = []common.Hash{keyThree}
+		valueThree = common.BytesToHash([]byte{})
+		bc.SetStorageValuesToReturn(blockOne, addressThree, valueThree[:])
 
 		initializerOne = storage.Transformer{
 			Address:           addressOne,
@@ -64,19 +76,22 @@ var _ = Describe("getStorageValue Command", func() {
 			Repository:        &mocks.MockStorageRepository{},
 		}.NewTransformer
 
-		initializers = []storage.TransformerInitializer{initializerOne, initializerTwo}
-		blockNumber = rand.Int63()
-		bigIntBlockNumber = big.NewInt(blockNumber)
+		initializerThree = storage.Transformer{
+			Address:           addressThree,
+			StorageKeysLookup: &keysLookupThree,
+			Repository:        &mocks.MockStorageRepository{},
+		}.NewTransformer
 
-		runner = backfill.NewStorageValueLoader(bc, nil, initializers, blockNumber)
+		initializers = []storage.TransformerInitializer{initializerOne, initializerTwo, initializerThree}
+		runner = backfill.NewStorageValueLoader(bc, nil, initializers, blockOne, blockTwo)
 
 		diffRepo = mocks.MockStorageDiffRepository{}
 		runner.StorageDiffRepo = &diffRepo
 
 		headerRepo = fakes.MockHeaderRepository{}
 		fakeHeader = fakes.FakeHeader
-		fakeHeader.BlockNumber = blockNumber
-		headerRepo.GetHeaderReturnHash = fakeHeader.Hash
+		fakeHeader.BlockNumber = blockOne
+		headerRepo.AllHeaders = []core.Header{fakeHeader}
 		runner.HeaderRepo = &headerRepo
 	})
 
@@ -97,10 +112,11 @@ var _ = Describe("getStorageValue Command", func() {
 		Expect(runnerErr).To(Equal(fakes.FakeError))
 	})
 
-	It("fetches the header by the given block number", func() {
+	It("fetches headers in the given block range", func() {
 		runnerErr := runner.Run()
 		Expect(runnerErr).NotTo(HaveOccurred())
-		Expect(headerRepo.GetHeaderPassedBlockNumber).To(Equal(blockNumber))
+		Expect(headerRepo.GetHeadersInRangeStartingBlock).To(Equal(blockOne))
+		Expect(headerRepo.GetHeadersInRangeEndingBlock).To(Equal(blockTwo))
 	})
 
 	It("returns an error if a header for the given block cannot be retrieved", func() {
@@ -110,23 +126,69 @@ var _ = Describe("getStorageValue Command", func() {
 		Expect(runnerErr).To(Equal(fakes.FakeError))
 	})
 
-	It("gets the storage values for each of the transformer's keys", func() {
-		keysLookupOne.KeysToReturn = []common.Hash{keyOne}
-		keysLookupTwo.KeysToReturn = []common.Hash{keyTwo}
+	It("gets the storage values for each transformer's keys", func() {
+		runnerErr := runner.Run()
+		Expect(runnerErr).NotTo(HaveOccurred())
+		Expect(keysLookupOne.GetKeysCalled).To(BeTrue())
+		Expect(keysLookupTwo.GetKeysCalled).To(BeTrue())
+
+		Expect(bc.BatchGetStorageAtCalls).To(ConsistOf(
+			fakes.BatchGetStorageAtCall{BlockNumber: bigIntBlockOne, Account: addressOne, Keys: []common.Hash{keyOne}},
+			fakes.BatchGetStorageAtCall{BlockNumber: bigIntBlockOne, Account: addressTwo, Keys: []common.Hash{keyTwo}},
+			fakes.BatchGetStorageAtCall{BlockNumber: bigIntBlockOne, Account: addressThree, Keys: []common.Hash{keyThree}},
+		))
+	})
+
+	It("chunks requests to avoid 413 Request Entity Too Large reply from server", func() {
+		manyKeys := make([]common.Hash, backfill.MaxRequestSize+1)
+		for index, _ := range manyKeys {
+			manyKeys[index] = test_data.FakeHash()
+		}
+		keysLookupTwo.KeysToReturn = manyKeys
 
 		runnerErr := runner.Run()
 		Expect(runnerErr).NotTo(HaveOccurred())
 		Expect(keysLookupOne.GetKeysCalled).To(BeTrue())
 		Expect(keysLookupTwo.GetKeysCalled).To(BeTrue())
 
-		Expect(bc.GetStorageAtPassedBlockNumber).To(Equal(bigIntBlockNumber))
-		Expect(bc.GetStorageAtPassedAccounts).To(ConsistOf(addressOne, addressTwo))
-		Expect(bc.GetStorageAtPassedKeys).To(ConsistOf(keyOne, keyTwo))
+		Expect(bc.BatchGetStorageAtCalls).To(ContainElement(fakes.BatchGetStorageAtCall{BlockNumber: bigIntBlockOne, Account: addressTwo, Keys: manyKeys[0:backfill.MaxRequestSize]}))
+		Expect(bc.BatchGetStorageAtCalls).To(ContainElement(fakes.BatchGetStorageAtCall{BlockNumber: bigIntBlockOne, Account: addressTwo, Keys: manyKeys[backfill.MaxRequestSize:]}))
 	})
 
-	It("returns an error if blockchain call to GetStorageAt fails", func() {
+	It("does not send request for empty chunk if keys length % max request size == 0", func() {
+		manyKeys := make([]common.Hash, backfill.MaxRequestSize)
+		for index, _ := range manyKeys {
+			manyKeys[index] = test_data.FakeHash()
+		}
+		keysLookupTwo.KeysToReturn = manyKeys
+
+		runnerErr := runner.Run()
+		Expect(runnerErr).NotTo(HaveOccurred())
+		Expect(bc.BatchGetStorageAtCalls).NotTo(ContainElement(fakes.BatchGetStorageAtCall{BlockNumber: bigIntBlockOne, Account: addressTwo, Keys: nil}))
+	})
+
+	It("gets storage values from every header in block range", func() {
+		headerRepo.AllHeaders = []core.Header{
+			{BlockNumber: blockOne},
+			{BlockNumber: blockTwo},
+		}
+
+		runnerErr := runner.Run()
+		Expect(runnerErr).NotTo(HaveOccurred())
+
+		Expect(keysLookupOne.GetKeysCalled).To(BeTrue())
+		Expect(keysLookupTwo.GetKeysCalled).To(BeTrue())
+		Expect(bc.BatchGetStorageAtCalls).To(ContainElement(
+			fakes.BatchGetStorageAtCall{BlockNumber: bigIntBlockOne, Account: addressTwo, Keys: []common.Hash{keyTwo}},
+		))
+		Expect(bc.BatchGetStorageAtCalls).To(ContainElement(
+			fakes.BatchGetStorageAtCall{BlockNumber: bigIntBlockTwo, Account: addressTwo, Keys: []common.Hash{keyTwo}},
+		))
+	})
+
+	It("returns an error if blockchain call to BatchGetStorageAt fails", func() {
 		keysLookupOne.KeysToReturn = []common.Hash{keyOne}
-		bc.SetGetStorageAtError(fakes.FakeError)
+		bc.BatchGetStorageAtError = fakes.FakeError
 
 		runnerErr := runner.Run()
 		Expect(keysLookupOne.GetKeysCalled).To(BeTrue())
@@ -134,51 +196,32 @@ var _ = Describe("getStorageValue Command", func() {
 		Expect(runnerErr).To(Equal(fakes.FakeError))
 	})
 
-	It("persists the storage values for each transformer", func() {
+	It("persists the non-zero storage values for each transformer", func() {
 		runnerErr := runner.Run()
 		Expect(runnerErr).NotTo(HaveOccurred())
 
 		trimmedHeaderHash := strings.TrimPrefix(fakeHeader.Hash, "0x")
 		headerHashBytes := common.HexToHash(trimmedHeaderHash)
 		expectedDiffOne := types.RawDiff{
-			BlockHeight:   int(blockNumber),
+			BlockHeight:   int(blockOne),
 			BlockHash:     headerHashBytes,
 			HashedAddress: crypto.Keccak256Hash(addressOne[:]),
-			StorageKey:    keyOne,
+			StorageKey:    crypto.Keccak256Hash(keyOne.Bytes()),
 			StorageValue:  valueOne,
 		}
 		expectedDiffTwo := types.RawDiff{
-			BlockHeight:   int(blockNumber),
+			BlockHeight:   int(blockOne),
 			BlockHash:     headerHashBytes,
 			HashedAddress: crypto.Keccak256Hash(addressTwo[:]),
-			StorageKey:    keyTwo,
+			StorageKey:    crypto.Keccak256Hash(keyTwo.Bytes()),
 			StorageValue:  valueTwo,
 		}
 
-		Expect(diffRepo.CreatePassedRawDiffs).To(ConsistOf(expectedDiffOne, expectedDiffTwo))
-	})
-
-	It("ignores sql.ErrNoRows error for duplicate diffs", func() {
-		diffRepo.CreateReturnError = sql.ErrNoRows
-		runnerErr := runner.Run()
-		Expect(runnerErr).NotTo(HaveOccurred())
+		Expect(diffRepo.CreateBackFilledStorageValuePassedRawDiffs).To(ConsistOf(expectedDiffOne, expectedDiffTwo))
 	})
 
 	It("returns an error if inserting a diff fails", func() {
-		diffRepo.CreateReturnError = fakes.FakeError
-		runnerErr := runner.Run()
-		Expect(runnerErr).To(HaveOccurred())
-		Expect(runnerErr).To(Equal(fakes.FakeError))
-	})
-
-	It("sets the diff a from_backfill", func() {
-		runnerErr := runner.Run()
-		Expect(runnerErr).NotTo(HaveOccurred())
-		Expect(diffRepo.MarkFromBackfillCalled).To(BeTrue())
-	})
-
-	It("returns an error if setting the diff as from_backfill fails", func() {
-		diffRepo.MarkFromBackfillError = fakes.FakeError
+		diffRepo.CreateBackFilledStorageValueReturnError = fakes.FakeError
 		runnerErr := runner.Run()
 		Expect(runnerErr).To(HaveOccurred())
 		Expect(runnerErr).To(Equal(fakes.FakeError))

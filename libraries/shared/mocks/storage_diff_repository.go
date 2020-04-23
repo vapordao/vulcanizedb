@@ -21,36 +21,37 @@ import (
 )
 
 type MockStorageDiffRepository struct {
-	CreatePassedRawDiffs   []types.RawDiff
-	CreateReturnID         int64
-	CreateReturnError      error
-	GetNewDiffsDiffs       []types.PersistedDiff
-	GetNewDiffsErrors      []error
-	MarkCheckedPassedID    int64
-	MarkFromBackfillCalled bool
-	MarkFromBackfillError  error
+	CreateBackFilledStorageValuePassedRawDiffs []types.RawDiff
+	CreateBackFilledStorageValueReturnError    error
+	CreatePassedRawDiffs                       []types.RawDiff
+	GetNewDiffsDiffs                           []types.PersistedDiff
+	GetNewDiffsErrors                          []error
+	GetNewDiffsPassedMinIDs                    []int
+	GetNewDiffsPassedLimits                    []int
+	MarkCheckedPassedID                        int64
 }
 
-func (repository *MockStorageDiffRepository) GetNewDiffs(diffs chan types.PersistedDiff, errs chan error, done chan bool) {
-	for _, diff := range repository.GetNewDiffsDiffs {
-		diffs <- diff
+func (repository *MockStorageDiffRepository) CreateStorageDiff(rawDiff types.RawDiff) (int64, error) {
+	repository.CreatePassedRawDiffs = append(repository.CreatePassedRawDiffs, rawDiff)
+	return 0, nil
+}
+
+func (repository *MockStorageDiffRepository) CreateBackFilledStorageValue(rawDiff types.RawDiff) error {
+	repository.CreateBackFilledStorageValuePassedRawDiffs = append(repository.CreateBackFilledStorageValuePassedRawDiffs, rawDiff)
+	return repository.CreateBackFilledStorageValueReturnError
+}
+
+func (repository *MockStorageDiffRepository) GetNewDiffs(minID, limit int) ([]types.PersistedDiff, error) {
+	repository.GetNewDiffsPassedMinIDs = append(repository.GetNewDiffsPassedMinIDs, minID)
+	repository.GetNewDiffsPassedLimits = append(repository.GetNewDiffsPassedLimits, limit)
+	err := repository.GetNewDiffsErrors[0]
+	if len(repository.GetNewDiffsErrors) > 1 {
+		repository.GetNewDiffsErrors = repository.GetNewDiffsErrors[1:]
 	}
-	for _, err := range repository.GetNewDiffsErrors {
-		errs <- err
-	}
+	return repository.GetNewDiffsDiffs, err
 }
 
 func (repository *MockStorageDiffRepository) MarkChecked(id int64) error {
 	repository.MarkCheckedPassedID = id
 	return nil
-}
-
-func (repository *MockStorageDiffRepository) CreateStorageDiff(rawDiff types.RawDiff) (int64, error) {
-	repository.CreatePassedRawDiffs = append(repository.CreatePassedRawDiffs, rawDiff)
-	return repository.CreateReturnID, repository.CreateReturnError
-}
-
-func (repository *MockStorageDiffRepository) MarkFromBackfill(id int64) error {
-	repository.MarkFromBackfillCalled = true
-	return repository.MarkFromBackfillError
 }

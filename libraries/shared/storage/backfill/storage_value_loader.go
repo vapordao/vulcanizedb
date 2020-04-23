@@ -1,7 +1,6 @@
 package backfill
 
 import (
-	"database/sql"
 	"math/big"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -16,14 +15,20 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-func NewStorageValueLoader(bc core.BlockChain, db *postgres.DB, initializers []storage.TransformerInitializer, blockNumber int64) StorageValueLoader {
+var (
+	MaxRequestSize    = 400
+	emptyStorageValue = common.BytesToHash([]byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0})
+)
+
+func NewStorageValueLoader(bc core.BlockChain, db *postgres.DB, initializers []storage.TransformerInitializer, startingBlock, endingBlock int64) StorageValueLoader {
 	return StorageValueLoader{
 		bc:              bc,
 		db:              db,
 		HeaderRepo:      repositories.NewHeaderRepository(db),
 		StorageDiffRepo: storage2.NewDiffRepository(db),
 		initializers:    initializers,
-		blockNumber:     blockNumber,
+		startingBlock:   startingBlock,
+		endingBlock:     endingBlock,
 	}
 }
 
@@ -33,7 +38,8 @@ type StorageValueLoader struct {
 	HeaderRepo      datastore.HeaderRepository
 	StorageDiffRepo storage2.DiffRepository
 	initializers    []storage.TransformerInitializer
-	blockNumber     int64
+	startingBlock   int64
+	endingBlock     int64
 }
 
 func (r *StorageValueLoader) Run() error {
@@ -41,24 +47,28 @@ func (r *StorageValueLoader) Run() error {
 	if getKeysErr != nil {
 		return getKeysErr
 	}
-	header, getHeaderErr := r.HeaderRepo.GetHeader(r.blockNumber)
-	if getHeaderErr != nil {
-		return getHeaderErr
+	headers, getHeadersErr := r.HeaderRepo.GetHeadersInRange(r.startingBlock, r.endingBlock)
+	if getHeadersErr != nil {
+		return getHeadersErr
 	}
 
-	for address, keys := range addressToKeys {
-		persistStorageErr := r.getAndPersistStorageValues(address, keys, r.blockNumber, header.Hash)
-		if persistStorageErr != nil {
-			return persistStorageErr
+	for _, header := range headers {
+		for address, chunkedKeys := range addressToKeys {
+			for _, keys := range chunkedKeys {
+				persistStorageErr := r.getAndPersistStorageValues(address, keys, header.BlockNumber, header.Hash)
+				if persistStorageErr != nil {
+					return persistStorageErr
+				}
+			}
 		}
 	}
-	logrus.Infof("Persisted storage values for %v addresses.", len(addressToKeys))
+	logrus.Infof("Finished persisting storage values for %v addresses from block %v to %v.", len(addressToKeys), r.startingBlock, r.endingBlock)
 
 	return nil
 }
 
-func (r *StorageValueLoader) getStorageKeys() (map[common.Address][]common.Hash, error) {
-	addressToKeys := make(map[common.Address][]common.Hash)
+func (r *StorageValueLoader) getStorageKeys() (map[common.Address][][]common.Hash, error) {
+	addressToKeys := make(map[common.Address][][]common.Hash, len(r.initializers))
 	for _, i := range r.initializers {
 		transformer := i(r.db)
 		keysLookup := transformer.GetStorageKeysLookup()
@@ -66,46 +76,64 @@ func (r *StorageValueLoader) getStorageKeys() (map[common.Address][]common.Hash,
 		if getKeysErr != nil {
 			return addressToKeys, getKeysErr
 		}
+		chunkedKeys := chunkKeys(keys)
 		address := transformer.GetContractAddress()
-		addressToKeys[address] = keys
+		addressToKeys[address] = chunkedKeys
 		logrus.Infof("Received %v storage keys for address:%v", len(keys), address.Hex())
 	}
 
 	return addressToKeys, nil
 }
 
-func (r *StorageValueLoader) getAndPersistStorageValues(address common.Address, keys []common.Hash, blockNumber int64, headerHash string) error {
-	logrus.Infof(
-		"Getting and persisting %v storage values. Address: %v HashedAddress: %v",
-		len(keys), address.Hex(), crypto.Keccak256Hash(address[:]).Hex())
+func (r *StorageValueLoader) getAndPersistStorageValues(address common.Address, keys []common.Hash, blockNumber int64, headerHashStr string) error {
 	blockNumberBigInt := big.NewInt(blockNumber)
+	blockHash := common.HexToHash(headerHashStr)
 	keccakOfAddress := crypto.Keccak256Hash(address[:])
-	logrus.Infof("Getting and persisting %v storage keys for address: %v, keccak hash of address: %v", len(keys), address.Hex(), keccakOfAddress.Hex())
-	for _, key := range keys {
-		value, getStorageErr := r.bc.GetStorageAt(address, key, blockNumberBigInt)
-		if getStorageErr != nil {
-			return getStorageErr
-		}
-		diff := types.RawDiff{
-			HashedAddress: keccakOfAddress,
-			BlockHash:     common.HexToHash(headerHash),
-			BlockHeight:   int(blockNumber),
-			StorageKey:    key,
-			StorageValue:  common.BytesToHash(value),
-		}
-
-		diffId, createDiffErr := r.StorageDiffRepo.CreateStorageDiff(diff)
-		if createDiffErr != nil {
-			if createDiffErr == sql.ErrNoRows {
-				return nil
+	logrus.WithFields(logrus.Fields{
+		"Address":       address.Hex(),
+		"HashedAddress": keccakOfAddress.Hex(),
+		"BlockNumber":   blockNumber,
+	}).Infof("Getting and persisting %v storage values", len(keys))
+	storageValues, getStorageValuesErr := r.bc.BatchGetStorageAt(address, keys, blockNumberBigInt)
+	if getStorageValuesErr != nil {
+		return getStorageValuesErr
+	}
+	for storageKey, storageValue := range storageValues {
+		storageValueHash := common.BytesToHash(storageValue)
+		if storageValueHash != emptyStorageValue {
+			diff := types.RawDiff{
+				HashedAddress: keccakOfAddress,
+				BlockHash:     blockHash,
+				BlockHeight:   int(blockNumber),
+				StorageKey:    crypto.Keccak256Hash(storageKey.Bytes()),
+				StorageValue:  storageValueHash,
 			}
-			return createDiffErr
-		}
-
-		markFromBackfillErr := r.StorageDiffRepo.MarkFromBackfill(diffId)
-		if markFromBackfillErr != nil {
-			return markFromBackfillErr
+			createDiffErr := r.StorageDiffRepo.CreateBackFilledStorageValue(diff)
+			if createDiffErr != nil {
+				return createDiffErr
+			}
 		}
 	}
 	return nil
+}
+
+func chunkKeys(keys []common.Hash) [][]common.Hash {
+	result := make([][]common.Hash, getNumberOfChunks(keys))
+	for index, key := range keys {
+		resultIndex := getChunkIndex(index)
+		result[resultIndex] = append(result[resultIndex], key)
+	}
+	return result
+}
+
+func getNumberOfChunks(keys []common.Hash) int {
+	keysLength := len(keys)
+	if keysLength%MaxRequestSize == 0 {
+		return keysLength / MaxRequestSize
+	}
+	return keysLength/MaxRequestSize + 1
+}
+
+func getChunkIndex(index int) int {
+	return index / MaxRequestSize
 }

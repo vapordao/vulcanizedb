@@ -17,15 +17,13 @@
 package repositories
 
 import (
-	"errors"
+	"fmt"
 
 	"github.com/jmoiron/sqlx"
 	"github.com/makerdao/vulcanizedb/pkg/core"
 	"github.com/makerdao/vulcanizedb/pkg/datastore/postgres"
 	"github.com/sirupsen/logrus"
 )
-
-var ErrValidHeaderExists = errors.New("valid header already exists")
 
 type HeaderRepository struct {
 	database *postgres.DB
@@ -39,7 +37,10 @@ func (repository HeaderRepository) CreateOrUpdateHeader(header core.Header) (int
 	var headerID int64
 	err := repository.database.QueryRowx("SELECT * FROM public.get_or_create_header($1, $2, $3, $4, $5)",
 		header.BlockNumber, header.Hash, header.Raw, header.Timestamp, repository.database.NodeID).Scan(&headerID)
-	return headerID, err
+	if err != nil {
+		return headerID, fmt.Errorf("error inserting header for block %d: %s", header.BlockNumber, err.Error())
+	}
+	return headerID, nil
 }
 
 func (repository HeaderRepository) CreateTransactions(headerID int64, transactions []core.TransactionModel) error {
@@ -80,6 +81,14 @@ func (repository HeaderRepository) GetHeader(blockNumber int64) (core.Header, er
 	err := repository.database.Get(&header,
 		`SELECT id, block_number, hash, raw, block_timestamp FROM headers WHERE block_number = $1`, blockNumber)
 	return header, err
+}
+
+func (repository HeaderRepository) GetHeadersInRange(startingBlock, endingBlock int64) ([]core.Header, error) {
+	var headers []core.Header
+	err := repository.database.Select(&headers,
+		`SELECT id, block_number, hash, raw, block_timestamp FROM headers WHERE block_number BETWEEN $1 AND $2 ORDER BY block_number ASC`,
+		startingBlock, endingBlock)
+	return headers, err
 }
 
 func (repository HeaderRepository) MissingBlockNumbers(startingBlockNumber, endingBlockNumber int64) ([]int64, error) {
