@@ -32,6 +32,7 @@ type MockStorageDiffRepository struct {
 	GetFirstDiffIDToReturn                     int64
 	GetFirstDiffIDErr                          error
 	GetFirstDiffBlockHeightPassed              int64
+	MarkNonCanonicalPassedID                   int64
 }
 
 func (repository *MockStorageDiffRepository) CreateStorageDiff(rawDiff types.RawDiff) (int64, error) {
@@ -62,4 +63,9 @@ func (repository *MockStorageDiffRepository) MarkChecked(id int64) error {
 func (repository *MockStorageDiffRepository) GetFirstDiffIDForBlockHeight(blockHeight int64) (int64, error) {
 	repository.GetFirstDiffBlockHeightPassed = blockHeight
 	return repository.GetFirstDiffIDToReturn, repository.GetFirstDiffIDErr
+}
+
+func (repository *MockStorageDiffRepository) MarkNonCanonical(id int64) error {
+	repository.MarkNonCanonicalPassedID = id
+	return nil
 }

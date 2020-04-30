@@ -383,7 +383,8 @@ CREATE TABLE public.storage_diff (
     storage_key bytea,
     storage_value bytea,
     checked boolean DEFAULT false NOT NULL,
-    from_backfill boolean DEFAULT false NOT NULL
+    from_backfill boolean DEFAULT false NOT NULL,
+    non_canonical boolean DEFAULT false NOT NULL
 );
 
 

@@ -37,10 +37,11 @@ type RawDiff struct {
 
 type PersistedDiff struct {
 	RawDiff
-	Checked      bool
-	FromBackfill bool `db:"from_backfill"`
 	ID           int64
 	HeaderID     int64 `db:"header_id"`
+	Checked      bool
+	NonCanonical bool `db:"non_canonical"`
+	FromBackfill bool `db:"from_backfill"`
 }
 
 func FromParityCsvRow(csvRow []string) (RawDiff, error) {

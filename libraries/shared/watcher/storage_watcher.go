@@ -31,9 +31,10 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-var ResultsLimit = 500
-
-var ErrHeaderMismatch = errors.New("header hash doesn't match between db and diff")
+var (
+	ErrHeaderMismatch = errors.New("header hash doesn't match between db and diff")
+	ResultsLimit      = 500
+)
 
 type IStorageWatcher interface {
 	AddTransformers(initializers []storage2.TransformerInitializer)
@@ -143,7 +144,11 @@ func (watcher StorageWatcher) transformDiff(diff types.PersistedDiff) error {
 
 	headerID, headerErr := watcher.getHeaderID(diff)
 	if headerErr != nil {
-		return fmt.Errorf("error getting header for diff: %w", headerErr)
+		if errors.Is(headerErr, ErrHeaderMismatch) {
+			return watcher.StorageDiffRepository.MarkNonCanonical(diff.ID)
+		} else {
+			return fmt.Errorf("error getting header for diff: %w", headerErr)
+		}
 	}
 	diff.HeaderID = headerID
 

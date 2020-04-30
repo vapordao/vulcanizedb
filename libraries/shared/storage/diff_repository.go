@@ -23,12 +23,15 @@ import (
 	"github.com/makerdao/vulcanizedb/pkg/datastore/postgres"
 )
 
+var RequiredConfirmations = 250
+
 type DiffRepository interface {
 	CreateStorageDiff(rawDiff types.RawDiff) (int64, error)
 	CreateBackFilledStorageValue(rawDiff types.RawDiff) error
 	GetNewDiffs(minID, limit int) ([]types.PersistedDiff, error)
 	MarkChecked(id int64) error
 	GetFirstDiffIDForBlockHeight(blockHeight int64) (int64, error)
+	MarkNonCanonical(id int64) error
 }
 
 type diffRepository struct {
@@ -65,7 +68,7 @@ func (repository diffRepository) CreateBackFilledStorageValue(rawDiff types.RawD
 
 func (repository diffRepository) GetNewDiffs(minID, limit int) ([]types.PersistedDiff, error) {
 	var result []types.PersistedDiff
-	query := fmt.Sprintf("SELECT * FROM public.storage_diff WHERE checked IS false and id > %d ORDER BY id ASC LIMIT %d", minID, limit)
+	query := fmt.Sprintf("SELECT * FROM public.storage_diff WHERE checked IS false AND non_canonical IS false AND id > %d ORDER BY id ASC LIMIT %d", minID, limit)
 	err := repository.db.Select(&result, query)
 	if err != nil {
 		return nil, fmt.Errorf("error getting unchecked storage diffs with id greater than %d: %w", minID, err)
@@ -89,4 +92,10 @@ func (repository diffRepository) GetFirstDiffIDForBlockHeight(blockHeight int64)
 		return diffID, fmt.Errorf("error getting first diff ID for block height %d: %w", blockHeight, err)
 	}
 	return diffID, nil
+}
+
+func (repository diffRepository) MarkNonCanonical(id int64) error {
+	query := fmt.Sprintf("UPDATE public.storage_diff SET non_canonical = true WHERE id = %d AND block_height < (SELECT max(block_height) from public.storage_diff) - %d", id, RequiredConfirmations)
+	_, err := repository.db.Exec(query)
+	return err
 }
