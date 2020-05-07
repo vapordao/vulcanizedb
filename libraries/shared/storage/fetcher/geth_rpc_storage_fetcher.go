@@ -81,6 +81,5 @@ func (fetcher GethRpcStorageFetcher) FetchStorageDiffs(out chan<- types.RawDiff,
 }
 
 func getAccountsFromDiff(stateDiff statediff.StateDiff) []statediff.AccountDiff {
-	accounts := append(stateDiff.CreatedAccounts, stateDiff.UpdatedAccounts...)
-	return append(accounts, stateDiff.DeletedAccounts...)
+	return stateDiff.UpdatedAccounts
 }
