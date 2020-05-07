@@ -34,7 +34,7 @@ var _ = Describe("ABI files", func() {
 	Describe("Reading ABI files", func() {
 
 		It("loads a valid ABI file", func() {
-			path := test_config.ABIFilePath + "valid_abi.json"
+			path := test_config.ABIFilePath + "sample_abi.json"
 
 			contractAbi, err := eth.ParseAbiFile(path)
 
@@ -47,7 +47,7 @@ var _ = Describe("ABI files", func() {
 
 			contractAbi, err := eth.ReadAbiFile(path)
 
-			Expect(contractAbi).To(Equal("[{\"foo\": \"bar\"}]"))
+			Expect(contractAbi).To(Equal("[{\"foo\":\"bar\"}]"))
 			Expect(err).To(BeNil())
 		})
 
