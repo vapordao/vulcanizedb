@@ -46,8 +46,8 @@ func NewDiffRepository(db *postgres.DB) diffRepository {
 func (repository diffRepository) CreateStorageDiff(rawDiff types.RawDiff) (int64, error) {
 	var storageDiffID int64
 	row := repository.db.QueryRowx(`INSERT INTO public.storage_diff
-		(hashed_address, block_height, block_hash, storage_key, storage_value) VALUES ($1, $2, $3, $4, $5)
-		ON CONFLICT DO NOTHING RETURNING id`, rawDiff.HashedAddress.Bytes(), rawDiff.BlockHeight, rawDiff.BlockHash.Bytes(),
+		(address, hashed_address, block_height, block_hash, storage_key, storage_value) VALUES ($1, $2, $3, $4, $5, $6)
+		ON CONFLICT DO NOTHING RETURNING id`, rawDiff.Address.Bytes(), rawDiff.HashedAddress.Bytes(), rawDiff.BlockHeight, rawDiff.BlockHash.Bytes(),
 		rawDiff.StorageKey.Bytes(), rawDiff.StorageValue.Bytes())
 	err := row.Scan(&storageDiffID)
 	if err != nil && err == sql.ErrNoRows {

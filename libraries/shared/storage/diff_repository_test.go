@@ -21,6 +21,7 @@ import (
 	"math/rand"
 
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/makerdao/vulcanizedb/libraries/shared/storage"
 	"github.com/makerdao/vulcanizedb/libraries/shared/storage/types"
 	"github.com/makerdao/vulcanizedb/libraries/shared/test_data"
@@ -36,11 +37,17 @@ var _ = Describe("Storage diffs repository", func() {
 		fakeStorageDiff types.RawDiff
 	)
 
+	//if we add a new constraint on the address too, will this break because all of the previous
+	//records will not have unique addresses?
+	//maybe not include that constraint for now?
+
 	BeforeEach(func() {
 		test_config.CleanTestDB(db)
 		repo = storage.NewDiffRepository(db)
+		address := test_data.FakeAddress()
 		fakeStorageDiff = types.RawDiff{
-			HashedAddress: test_data.FakeHash(),
+			Address: address,
+			HashedAddress: crypto.Keccak256Hash(address[:]),
 			BlockHash:     test_data.FakeHash(),
 			BlockHeight:   rand.Int(),
 			StorageKey:    test_data.FakeHash(),
@@ -58,6 +65,7 @@ var _ = Describe("Storage diffs repository", func() {
 			getErr := db.Get(&persisted, `SELECT * FROM public.storage_diff`)
 			Expect(getErr).NotTo(HaveOccurred())
 			Expect(persisted.ID).To(Equal(id))
+			Expect(persisted.Address).To(Equal(fakeStorageDiff.Address))
 			Expect(persisted.HashedAddress).To(Equal(fakeStorageDiff.HashedAddress))
 			Expect(persisted.BlockHash).To(Equal(fakeStorageDiff.BlockHash))
 			Expect(persisted.BlockHeight).To(Equal(fakeStorageDiff.BlockHeight))
@@ -81,12 +89,13 @@ var _ = Describe("Storage diffs repository", func() {
 	})
 
 	Describe("CreateBackFilledStorageValue", func() {
+		//TODO: update the create_back_filled_storage_value function
 		It("creates a storage diff", func() {
 			createErr := repo.CreateBackFilledStorageValue(fakeStorageDiff)
 
 			Expect(createErr).NotTo(HaveOccurred())
 			var persisted types.PersistedDiff
-			getErr := db.Get(&persisted, `SELECT * FROM public.storage_diff`)
+			getErr := db.Get(&persisted, `SELECT hashed_address, block_hash, block_height, storage_key, storage_value FROM public.storage_diff`)
 			Expect(getErr).NotTo(HaveOccurred())
 			Expect(persisted.HashedAddress).To(Equal(fakeStorageDiff.HashedAddress))
 			Expect(persisted.BlockHash).To(Equal(fakeStorageDiff.BlockHash))
@@ -192,8 +201,10 @@ var _ = Describe("Storage diffs repository", func() {
 
 	Describe("GetNewDiffs", func() {
 		It("sends diffs that are not marked as checked", func() {
+			address := test_data.FakeAddress()
 			fakeRawDiff := types.RawDiff{
-				HashedAddress: test_data.FakeHash(),
+			    Address: address,
+				HashedAddress: crypto.Keccak256Hash(address[:]),
 				BlockHash:     test_data.FakeHash(),
 				BlockHeight:   rand.Int(),
 				StorageKey:    test_data.FakeHash(),
@@ -204,8 +215,8 @@ var _ = Describe("Storage diffs repository", func() {
 				ID:      rand.Int63(),
 			}
 			_, insertErr := db.Exec(`INSERT INTO public.storage_diff (id, block_height, block_hash,
-				hashed_address, storage_key, storage_value) VALUES ($1, $2, $3, $4, $5, $6)`, fakePersistedDiff.ID,
-				fakeRawDiff.BlockHeight, fakeRawDiff.BlockHash.Bytes(), fakeRawDiff.HashedAddress.Bytes(),
+				address, hashed_address, storage_key, storage_value) VALUES ($1, $2, $3, $4, $5, $6, $7)`, fakePersistedDiff.ID,
+				fakeRawDiff.BlockHeight, fakeRawDiff.BlockHash.Bytes(), fakeRawDiff.Address.Bytes(), fakeRawDiff.HashedAddress.Bytes(),
 				fakeRawDiff.StorageKey.Bytes(), fakeRawDiff.StorageValue.Bytes())
 			Expect(insertErr).NotTo(HaveOccurred())
 
@@ -216,8 +227,10 @@ var _ = Describe("Storage diffs repository", func() {
 		})
 
 		It("does not send diff that's marked as checked", func() {
+			address := test_data.FakeAddress()
 			fakeRawDiff := types.RawDiff{
-				HashedAddress: test_data.FakeHash(),
+				Address: address,
+				HashedAddress: crypto.Keccak256Hash(address[:]),
 				BlockHash:     test_data.FakeHash(),
 				BlockHeight:   rand.Int(),
 				StorageKey:    test_data.FakeHash(),
@@ -229,8 +242,8 @@ var _ = Describe("Storage diffs repository", func() {
 				Checked: true,
 			}
 			_, insertErr := db.Exec(`INSERT INTO public.storage_diff (id, block_height, block_hash,
-				hashed_address, storage_key, storage_value, checked) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-				fakePersistedDiff.ID, fakeRawDiff.BlockHeight, fakeRawDiff.BlockHash.Bytes(),
+				address, hashed_address, storage_key, storage_value, checked) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+				fakePersistedDiff.ID, fakeRawDiff.BlockHeight, fakeRawDiff.BlockHash.Bytes(), fakeRawDiff.Address.Bytes(),
 				fakeRawDiff.HashedAddress.Bytes(), fakeRawDiff.StorageKey.Bytes(), fakeRawDiff.StorageValue.Bytes(),
 				fakePersistedDiff.Checked)
 			Expect(insertErr).NotTo(HaveOccurred())
@@ -244,17 +257,19 @@ var _ = Describe("Storage diffs repository", func() {
 		It("enables seeking diffs with greater ID", func() {
 			blockZero := rand.Int()
 			for i := 0; i < 2; i++ {
+				address := test_data.FakeAddress()
 				fakeRawDiff := types.RawDiff{
-					HashedAddress: test_data.FakeHash(),
+					Address: address,
+					HashedAddress: crypto.Keccak256Hash(address[:]),
 					BlockHash:     test_data.FakeHash(),
 					BlockHeight:   blockZero + i,
 					StorageKey:    test_data.FakeHash(),
 					StorageValue:  test_data.FakeHash(),
 				}
-				_, insertErr := db.Exec(`INSERT INTO public.storage_diff (block_height, block_hash,
-				hashed_address, storage_key, storage_value) VALUES ($1, $2, $3, $4, $5)`, fakeRawDiff.BlockHeight,
-					fakeRawDiff.BlockHash.Bytes(), fakeRawDiff.HashedAddress.Bytes(), fakeRawDiff.StorageKey.Bytes(),
-					fakeRawDiff.StorageValue.Bytes())
+				_, insertErr := db.Exec(`INSERT INTO public.storage_diff (block_height, block_hash, address,
+				hashed_address, storage_key, storage_value) VALUES ($1, $2, $3, $4, $5, $6)`, fakeRawDiff.BlockHeight,
+					fakeRawDiff.BlockHash.Bytes(), fakeRawDiff.Address.Bytes(), fakeRawDiff.HashedAddress.Bytes(),
+					fakeRawDiff.StorageKey.Bytes(), fakeRawDiff.StorageValue.Bytes())
 				Expect(insertErr).NotTo(HaveOccurred())
 			}
 
@@ -273,8 +288,10 @@ var _ = Describe("Storage diffs repository", func() {
 
 	Describe("MarkChecked", func() {
 		It("marks a diff as checked", func() {
+			address := test_data.FakeAddress()
 			fakeRawDiff := types.RawDiff{
-				HashedAddress: test_data.FakeHash(),
+				Address:       address,
+				HashedAddress: crypto.Keccak256Hash(address[:]),
 				BlockHash:     test_data.FakeHash(),
 				BlockHeight:   rand.Int(),
 				StorageKey:    test_data.FakeHash(),
@@ -286,8 +303,8 @@ var _ = Describe("Storage diffs repository", func() {
 				Checked: false,
 			}
 			_, insertErr := db.Exec(`INSERT INTO public.storage_diff (id, block_height, block_hash,
-				hashed_address, storage_key, storage_value, checked) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-				fakePersistedDiff.ID, fakeRawDiff.BlockHeight, fakeRawDiff.BlockHash.Bytes(),
+				address, hashed_address, storage_key, storage_value, checked) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+				fakePersistedDiff.ID, fakeRawDiff.BlockHeight, fakeRawDiff.BlockHash.Bytes(), fakeRawDiff.Address.Bytes(),
 				fakeRawDiff.HashedAddress.Bytes(), fakeRawDiff.StorageKey.Bytes(), fakeRawDiff.StorageValue.Bytes(),
 				fakePersistedDiff.Checked)
 			Expect(insertErr).NotTo(HaveOccurred())
