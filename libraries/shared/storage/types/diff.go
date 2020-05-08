@@ -28,6 +28,7 @@ import (
 const ExpectedRowLength = 5
 
 type RawDiff struct {
+	Address       common.Address
 	HashedAddress common.Hash `db:"hashed_address"`
 	BlockHash     common.Hash `db:"block_hash"`
 	BlockHeight   int         `db:"block_height"`
@@ -52,6 +53,7 @@ func FromParityCsvRow(csvRow []string) (RawDiff, error) {
 		return RawDiff{}, err
 	}
 	return RawDiff{
+		Address:       common.HexToAddress(csvRow[0]),
 		HashedAddress: HexToKeccak256Hash(csvRow[0]),
 		BlockHash:     common.HexToHash(csvRow[1]),
 		BlockHeight:   height,
@@ -68,7 +70,8 @@ func FromGethStateDiff(account statediff.AccountDiff, stateDiff *statediff.State
 	}
 
 	return RawDiff{
-		HashedAddress: common.BytesToHash(account.Key),
+		Address:       common.BytesToAddress(account.Key),
+		HashedAddress: crypto.Keccak256Hash(account.Key),
 		BlockHash:     stateDiff.BlockHash,
 		BlockHeight:   int(stateDiff.BlockNumber.Int64()),
 		StorageKey:    common.BytesToHash(storage.Key),

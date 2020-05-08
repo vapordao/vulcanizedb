@@ -16,6 +16,7 @@ package fetcher_test
 
 import (
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/rlp"
 	"github.com/ethereum/go-ethereum/statediff"
 	"github.com/makerdao/vulcanizedb/libraries/shared/mocks"
@@ -96,35 +97,38 @@ var _ = Describe("Geth RPC Storage Fetcher", func() {
 
 		height := test_data.BlockNumber
 		intHeight := int(height.Int64())
-		createdExpectedStorageDiff := types.RawDiff{
-			HashedAddress: common.BytesToHash(test_data.ContractLeafKey[:]),
+		expectedDiff1 := types.RawDiff{
+			Address: common.BytesToAddress(test_data.ContractLeafKey[:]),
+			HashedAddress: crypto.Keccak256Hash(test_data.ContractLeafKey[:]),
 			BlockHash:     common.HexToHash("0xfa40fbe2d98d98b3363a778d52f2bcd29d6790b9b3f3cab2b167fd12d3550f73"),
 			BlockHeight:   intHeight,
 			StorageKey:    common.BytesToHash(test_data.StorageKey),
 			StorageValue:  common.BytesToHash(test_data.SmallStorageValue),
 		}
-		updatedExpectedStorageDiff := types.RawDiff{
-			HashedAddress: common.BytesToHash(test_data.AnotherContractLeafKey[:]),
+		expectedDiff2 := types.RawDiff{
+			Address:       common.BytesToAddress(test_data.AnotherContractLeafKey[:]),
+			HashedAddress: crypto.Keccak256Hash(test_data.AnotherContractLeafKey[:]),
 			BlockHash:     common.HexToHash("0xfa40fbe2d98d98b3363a778d52f2bcd29d6790b9b3f3cab2b167fd12d3550f73"),
 			BlockHeight:   intHeight,
 			StorageKey:    common.BytesToHash(test_data.StorageKey),
 			StorageValue:  common.BytesToHash(test_data.LargeStorageValue),
 		}
-		deletedExpectedStorageDiff := types.RawDiff{
-			HashedAddress: common.BytesToHash(test_data.AnotherContractLeafKey[:]),
+		expectedDiff3 := types.RawDiff{
+			Address:       common.BytesToAddress(test_data.AnotherContractLeafKey[:]),
+			HashedAddress: crypto.Keccak256Hash(test_data.AnotherContractLeafKey[:]),
 			BlockHash:     common.HexToHash("0xfa40fbe2d98d98b3363a778d52f2bcd29d6790b9b3f3cab2b167fd12d3550f73"),
 			BlockHeight:   intHeight,
 			StorageKey:    common.BytesToHash(test_data.StorageKey),
 			StorageValue:  common.BytesToHash(test_data.SmallStorageValue),
 		}
 
-		createdStateDiff := <-storagediffChan
-		updatedStateDiff := <-storagediffChan
-		deletedStateDiff := <-storagediffChan
+		diff1 := <-storagediffChan
+		diff2 := <-storagediffChan
+		diff3 := <-storagediffChan
 
-		Expect(createdStateDiff).To(Equal(createdExpectedStorageDiff))
-		Expect(updatedStateDiff).To(Equal(updatedExpectedStorageDiff))
-		Expect(deletedStateDiff).To(Equal(deletedExpectedStorageDiff))
+		Expect(diff1).To(Equal(expectedDiff1))
+		Expect(diff2).To(Equal(expectedDiff2))
+		Expect(diff3).To(Equal(expectedDiff3))
 
 		close(done)
 	})

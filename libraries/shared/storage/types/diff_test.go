@@ -18,6 +18,7 @@ package types_test
 
 import (
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/rlp"
 	"github.com/ethereum/go-ethereum/statediff"
 	"github.com/makerdao/vulcanizedb/libraries/shared/storage/types"
@@ -43,6 +44,7 @@ var _ = Describe("Storage row parsing", func() {
 
 			Expect(err).NotTo(HaveOccurred())
 			expectedKeccakOfContractAddress := types.HexToKeccak256Hash(contract)
+			Expect(result.Address).To(Equal(common.HexToAddress(contract)))
 			Expect(result.HashedAddress).To(Equal(expectedKeccakOfContractAddress))
 			Expect(result.BlockHash).To(Equal(common.HexToHash(blockHash)))
 			Expect(result.BlockHeight).To(Equal(789))
@@ -86,8 +88,9 @@ var _ = Describe("Storage row parsing", func() {
 			result, err := types.FromGethStateDiff(accountDiff, stateDiff, storageDiff)
 			Expect(err).NotTo(HaveOccurred())
 
-			expectedAddress := common.BytesToHash(accountDiff.Key)
-			Expect(result.HashedAddress).To(Equal(expectedAddress))
+			Expect(result.Address).To(Equal(common.BytesToAddress(accountDiff.Key)))
+			expectedKeccakOfContractAddress := crypto.Keccak256Hash(accountDiff.Key)
+			Expect(result.HashedAddress).To(Equal(expectedKeccakOfContractAddress))
 			Expect(result.BlockHash).To(Equal(fakes.FakeHash))
 			expectedBlockHeight := int(stateDiff.BlockNumber.Int64())
 			Expect(result.BlockHeight).To(Equal(expectedBlockHeight))
