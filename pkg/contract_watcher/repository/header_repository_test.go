@@ -23,6 +23,7 @@ import (
 	"github.com/makerdao/vulcanizedb/pkg/contract_watcher/helpers/test_helpers/mocks"
 	"github.com/makerdao/vulcanizedb/pkg/contract_watcher/repository"
 	"github.com/makerdao/vulcanizedb/pkg/core"
+	"github.com/makerdao/vulcanizedb/pkg/datastore"
 	"github.com/makerdao/vulcanizedb/pkg/datastore/postgres"
 	"github.com/makerdao/vulcanizedb/pkg/datastore/postgres/repositories"
 	. "github.com/onsi/ginkgo"
@@ -30,19 +31,16 @@ import (
 )
 
 var _ = Describe("Repository", func() {
-	var db *postgres.DB
-	var contractHeaderRepo repository.HeaderRepository // contract_watcher header repository
-	var coreHeaderRepo repositories.HeaderRepository   // pkg/datastore header repository
-	var eventIDs = []string{
-		"eventName_contractAddr",
-		"eventName_contractAddr2",
-		"eventName_contractAddr3",
-	}
-	var methodIDs = []string{
-		"methodName_contractAddr",
-		"methodName_contractAddr2",
-		"methodName_contractAddr3",
-	}
+	var (
+		db                 *postgres.DB
+		contractHeaderRepo repository.HeaderRepository // contract_watcher header repository
+		coreHeaderRepo     datastore.HeaderRepository  // pkg/datastore header repository
+		eventIDs           = []string{
+			"eventName_contractAddr",
+			"eventName_contractAddr2",
+			"eventName_contractAddr3",
+		}
+	)
 
 	BeforeEach(func() {
 		db, _ = test_helpers.SetupDBandBC()
@@ -310,41 +308,9 @@ var _ = Describe("Repository", func() {
 			}
 		})
 	})
-
-	Describe("MissingMethodsCheckedEventsIntersection", func() {
-		It("Returns headers that have been checked for all the provided events but have not been checked for all the provided methods", func() {
-			addHeaders(coreHeaderRepo)
-			for i, id := range eventIDs {
-				err := contractHeaderRepo.AddCheckColumn(id)
-				Expect(err).ToNot(HaveOccurred())
-				err = contractHeaderRepo.AddCheckColumn(methodIDs[i])
-				Expect(err).ToNot(HaveOccurred())
-			}
-
-			missingHeaders, err := contractHeaderRepo.MissingHeaders(mocks.MockHeader1.BlockNumber, mocks.MockHeader4.BlockNumber, eventIDs[0])
-			Expect(err).ToNot(HaveOccurred())
-			Expect(len(missingHeaders)).To(Equal(3))
-
-			headerID := missingHeaders[0].Id
-			headerID2 := missingHeaders[1].Id
-			for i, id := range eventIDs {
-				err = contractHeaderRepo.MarkHeaderChecked(headerID, id)
-				Expect(err).ToNot(HaveOccurred())
-				err = contractHeaderRepo.MarkHeaderChecked(headerID2, id)
-				Expect(err).ToNot(HaveOccurred())
-				err = contractHeaderRepo.MarkHeaderChecked(headerID, methodIDs[i])
-				Expect(err).ToNot(HaveOccurred())
-			}
-
-			intersectionHeaders, err := contractHeaderRepo.MissingMethodsCheckedEventsIntersection(mocks.MockHeader1.BlockNumber, mocks.MockHeader4.BlockNumber, methodIDs, eventIDs)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(len(intersectionHeaders)).To(Equal(1))
-			Expect(intersectionHeaders[0].Id).To(Equal(headerID2))
-		})
-	})
 })
 
-func addHeaders(coreHeaderRepo repositories.HeaderRepository) {
+func addHeaders(coreHeaderRepo datastore.HeaderRepository) {
 	_, err := coreHeaderRepo.CreateOrUpdateHeader(mocks.MockHeader1)
 	Expect(err).NotTo(HaveOccurred())
 	_, err = coreHeaderRepo.CreateOrUpdateHeader(mocks.MockHeader2)
@@ -353,7 +319,7 @@ func addHeaders(coreHeaderRepo repositories.HeaderRepository) {
 	Expect(err).NotTo(HaveOccurred())
 }
 
-func addDiscontinuousHeaders(coreHeaderRepo repositories.HeaderRepository) {
+func addDiscontinuousHeaders(coreHeaderRepo datastore.HeaderRepository) {
 	_, err := coreHeaderRepo.CreateOrUpdateHeader(mocks.MockHeader1)
 	Expect(err).NotTo(HaveOccurred())
 	_, err = coreHeaderRepo.CreateOrUpdateHeader(mocks.MockHeader2)
@@ -362,7 +328,7 @@ func addDiscontinuousHeaders(coreHeaderRepo repositories.HeaderRepository) {
 	Expect(err).NotTo(HaveOccurred())
 }
 
-func addLaterHeaders(coreHeaderRepo repositories.HeaderRepository) {
+func addLaterHeaders(coreHeaderRepo datastore.HeaderRepository) {
 	_, err := coreHeaderRepo.CreateOrUpdateHeader(mocks.MockHeader3)
 	Expect(err).NotTo(HaveOccurred())
 	_, err = coreHeaderRepo.CreateOrUpdateHeader(mocks.MockHeader4)

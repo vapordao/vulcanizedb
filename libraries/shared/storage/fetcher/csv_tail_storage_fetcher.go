@@ -21,15 +21,18 @@ import (
 
 	"github.com/makerdao/vulcanizedb/libraries/shared/storage/types"
 	"github.com/makerdao/vulcanizedb/pkg/fs"
-	"github.com/sirupsen/logrus"
 )
 
 type CsvTailStorageFetcher struct {
-	tailer fs.Tailer
+	tailer       fs.Tailer
+	statusWriter fs.StatusWriter
 }
 
-func NewCsvTailStorageFetcher(tailer fs.Tailer) CsvTailStorageFetcher {
-	return CsvTailStorageFetcher{tailer: tailer}
+func NewCsvTailStorageFetcher(tailer fs.Tailer, statusWriter fs.StatusWriter) CsvTailStorageFetcher {
+	return CsvTailStorageFetcher{
+		tailer:       tailer,
+		statusWriter: statusWriter,
+	}
 }
 
 func (storageFetcher CsvTailStorageFetcher) FetchStorageDiffs(out chan<- types.RawDiff, errs chan<- error) {
@@ -37,7 +40,11 @@ func (storageFetcher CsvTailStorageFetcher) FetchStorageDiffs(out chan<- types.R
 	if tailErr != nil {
 		errs <- tailErr
 	}
-	logrus.Debug("fetching storage diffs...")
+	writeErr := storageFetcher.statusWriter.Write()
+	if writeErr != nil {
+		errs <- writeErr
+	}
+
 	for line := range t.Lines {
 		diff, parseErr := types.FromParityCsvRow(strings.Split(line.Text, ","))
 		if parseErr != nil {

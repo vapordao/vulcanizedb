@@ -17,11 +17,14 @@
 package repositories_test
 
 import (
+	"database/sql"
 	"math/big"
 	"math/rand"
+	"strconv"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/makerdao/vulcanizedb/pkg/core"
+	"github.com/makerdao/vulcanizedb/pkg/datastore"
 	"github.com/makerdao/vulcanizedb/pkg/datastore/postgres/repositories"
 	"github.com/makerdao/vulcanizedb/pkg/fakes"
 	"github.com/makerdao/vulcanizedb/test_config"
@@ -32,7 +35,7 @@ import (
 var _ = Describe("Block header repository", func() {
 	var (
 		db     = test_config.NewTestDB(test_config.NewTestNode())
-		repo   repositories.HeaderRepository
+		repo   datastore.HeaderRepository
 		header core.Header
 	)
 
@@ -129,80 +132,6 @@ var _ = Describe("Block header repository", func() {
 			Expect(readErr).NotTo(HaveOccurred())
 			Expect(len(dbHeaderHashes)).To(Equal(1))
 			Expect(dbHeaderHashes[0]).To(Equal(headerTwo.Hash))
-		})
-	})
-
-	Describe("creating a receipt", func() {
-		It("adds a receipt in a tx", func() {
-			headerID, err := repo.CreateOrUpdateHeader(header)
-			Expect(err).NotTo(HaveOccurred())
-			fromAddress := common.HexToAddress("0x1234")
-			toAddress := common.HexToAddress("0x5678")
-			txHash := common.HexToHash("0x9876")
-			txIndex := big.NewInt(123)
-			transaction := core.TransactionModel{
-				Data:     []byte{},
-				From:     fromAddress.Hex(),
-				GasLimit: 0,
-				GasPrice: 0,
-				Hash:     txHash.Hex(),
-				Nonce:    0,
-				Raw:      []byte{},
-				To:       toAddress.Hex(),
-				TxIndex:  txIndex.Int64(),
-				Value:    "0",
-			}
-			tx, err := db.Beginx()
-			Expect(err).ToNot(HaveOccurred())
-			txId, txErr := repo.CreateTransactionInTx(tx, headerID, transaction)
-			Expect(txErr).ToNot(HaveOccurred())
-
-			contractAddr := common.HexToAddress("0x1234")
-			stateRoot := common.HexToHash("0x5678")
-			receipt := core.Receipt{
-				ContractAddress:   contractAddr.Hex(),
-				TxHash:            txHash.Hex(),
-				GasUsed:           10,
-				CumulativeGasUsed: 100,
-				StateRoot:         stateRoot.Hex(),
-				Rlp:               []byte{1, 2, 3},
-			}
-
-			receiptRepo := repositories.ReceiptRepository{}
-			_, receiptErr := receiptRepo.CreateReceiptInTx(headerID, txId, receipt, tx)
-			Expect(receiptErr).ToNot(HaveOccurred())
-			commitErr := tx.Commit()
-			Expect(commitErr).ToNot(HaveOccurred())
-
-			type idModel struct {
-				TransactionId     int64  `db:"transaction_id"`
-				ContractAddressId int64  `db:"contract_address_id"`
-				CumulativeGasUsed uint64 `db:"cumulative_gas_used"`
-				GasUsed           uint64 `db:"gas_used"`
-				StateRoot         string `db:"state_root"`
-				Status            int
-				TxHash            string `db:"tx_hash"`
-				Rlp               []byte `db:"rlp"`
-			}
-
-			var addressId int64
-			getAddressErr := db.Get(&addressId, `SELECT id FROM addresses WHERE address = $1`, contractAddr.Hex())
-			Expect(getAddressErr).NotTo(HaveOccurred())
-
-			var dbReceipt idModel
-			getReceiptErr := db.Get(&dbReceipt,
-				`SELECT transaction_id, contract_address_id, cumulative_gas_used, gas_used, state_root, status, tx_hash, rlp
-				FROM public.receipts WHERE header_id = $1`, headerID)
-			Expect(getReceiptErr).NotTo(HaveOccurred())
-
-			Expect(dbReceipt.TransactionId).To(Equal(txId))
-			Expect(dbReceipt.TxHash).To(Equal(txHash.Hex()))
-			Expect(dbReceipt.ContractAddressId).To(Equal(addressId))
-			Expect(dbReceipt.CumulativeGasUsed).To(Equal(uint64(100)))
-			Expect(dbReceipt.GasUsed).To(Equal(uint64(10)))
-			Expect(dbReceipt.StateRoot).To(Equal(stateRoot.Hex()))
-			Expect(dbReceipt.Status).To(Equal(0))
-			Expect(dbReceipt.Rlp).To(Equal([]byte{1, 2, 3}))
 		})
 	})
 
@@ -344,12 +273,12 @@ var _ = Describe("Block header repository", func() {
 		})
 	})
 
-	Describe("Getting a header", func() {
+	Describe("Getting a header by block number", func() {
 		It("returns header if it exists", func() {
 			_, createErr := repo.CreateOrUpdateHeader(header)
 			Expect(createErr).NotTo(HaveOccurred())
 
-			dbHeader, err := repo.GetHeader(header.BlockNumber)
+			dbHeader, err := repo.GetHeaderByBlockNumber(header.BlockNumber)
 
 			Expect(err).NotTo(HaveOccurred())
 			Expect(dbHeader.Id).NotTo(BeZero())
@@ -366,10 +295,37 @@ var _ = Describe("Block header repository", func() {
 			dbTwo := test_config.NewTestDB(test_config.NewTestNode())
 			repoTwo := repositories.NewHeaderRepository(dbTwo)
 
-			result, readErr := repoTwo.GetHeader(header.BlockNumber)
+			result, readErr := repoTwo.GetHeaderByBlockNumber(header.BlockNumber)
 
 			Expect(readErr).NotTo(HaveOccurred())
 			Expect(result.Raw).To(MatchJSON(header.Raw))
+		})
+	})
+
+	Describe("Getting a header by ID", func() {
+		It("returns header with associated ID", func() {
+			wantedHeader := core.Header{
+				BlockNumber: rand.Int63(),
+				Hash:        fakes.RandomString(64),
+				Raw:         nil,
+				Timestamp:   strconv.Itoa(rand.Int()),
+			}
+			var wantedHeaderID int64
+			wantedHeaderErr := db.Get(&wantedHeaderID, `
+				INSERT INTO public.headers (block_number, hash, block_timestamp, eth_node_id) VALUES ($1, $2, $3, $4)
+				RETURNING id`, wantedHeader.BlockNumber, wantedHeader.Hash, wantedHeader.Timestamp, db.NodeID)
+			Expect(wantedHeaderErr).NotTo(HaveOccurred())
+			wantedHeader.Id = wantedHeaderID
+
+			_, anotherHeaderErr := db.Exec(`INSERT INTO public.headers (block_number, hash, block_timestamp,
+                            eth_node_id) VALUES ($1, $2, $3, $4) RETURNING id`, rand.Int()-1, fakes.RandomString(64),
+				strconv.Itoa(rand.Int()), db.NodeID)
+			Expect(anotherHeaderErr).NotTo(HaveOccurred())
+
+			header, err := repo.GetHeaderByID(wantedHeaderID)
+
+			Expect(err).NotTo(HaveOccurred())
+			Expect(header).To(Equal(wantedHeader))
 		})
 	})
 
@@ -407,7 +363,7 @@ var _ = Describe("Block header repository", func() {
 	})
 
 	Describe("Getting missing headers", func() {
-		It("returns block numbers for headers not in the database", func() {
+		It("returns block numbers for headers not in the db", func() {
 			_, createOneErr := repo.CreateOrUpdateHeader(fakes.GetFakeHeader(1))
 			Expect(createOneErr).NotTo(HaveOccurred())
 
@@ -440,6 +396,28 @@ var _ = Describe("Block header repository", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			Expect(missingBlockNumbers).To(ConsistOf([]int64{2, 4}))
+		})
+	})
+
+	Describe("GetMostRecentHeaderBlockNumber", func() {
+		It("gets the most recent header block number", func() {
+			_, createHeader1Err := repo.CreateOrUpdateHeader(header)
+			Expect(createHeader1Err).NotTo(HaveOccurred())
+
+			header2BlockNumber := header.BlockNumber + int64(1)
+			header2 := fakes.GetFakeHeader(header2BlockNumber)
+			_, createHeader2Err := repo.CreateOrUpdateHeader(header2)
+			Expect(createHeader2Err).NotTo(HaveOccurred())
+
+			mostRecentHeaderBlock, err := repo.GetMostRecentHeaderBlockNumber()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(mostRecentHeaderBlock).To(Equal(header2BlockNumber))
+		})
+
+		It("returns an error if it fails to get the most recent header", func() {
+			_, err := repo.GetMostRecentHeaderBlockNumber()
+			Expect(err).To(HaveOccurred())
+			Expect(err).To(MatchError(sql.ErrNoRows))
 		})
 	})
 })

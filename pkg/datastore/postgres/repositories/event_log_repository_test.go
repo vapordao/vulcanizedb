@@ -23,7 +23,6 @@ import (
 	"github.com/makerdao/vulcanizedb/libraries/shared/repository"
 	"github.com/makerdao/vulcanizedb/libraries/shared/test_data"
 	"github.com/makerdao/vulcanizedb/pkg/datastore"
-	"github.com/makerdao/vulcanizedb/pkg/datastore/postgres"
 	"github.com/makerdao/vulcanizedb/pkg/datastore/postgres/repositories"
 	"github.com/makerdao/vulcanizedb/pkg/fakes"
 	"github.com/makerdao/vulcanizedb/test_config"
@@ -31,16 +30,15 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-var _ = Describe("Header sync log repository", func() {
+var _ = Describe("Event log repository", func() {
 	var (
-		db               *postgres.DB
+		db               = test_config.NewTestDB(test_config.NewTestNode())
 		headerID         int64
 		repo             datastore.EventLogRepository
-		headerRepository repositories.HeaderRepository
+		headerRepository datastore.HeaderRepository
 	)
 
 	BeforeEach(func() {
-		db = test_config.NewTestDB(test_config.NewTestNode())
 		test_config.CleanTestDB(db)
 		headerRepository = repositories.NewHeaderRepository(db)
 		var headerErr error
@@ -48,11 +46,6 @@ var _ = Describe("Header sync log repository", func() {
 		Expect(headerErr).NotTo(HaveOccurred())
 
 		repo = repositories.NewEventLogRepository(db)
-	})
-
-	AfterEach(func() {
-		closeErr := db.Close()
-		Expect(closeErr).NotTo(HaveOccurred())
 	})
 
 	Describe("CreateEventLogs", func() {
@@ -166,7 +159,7 @@ var _ = Describe("Header sync log repository", func() {
 	Describe("GetUntransformedEventLogs", func() {
 		Describe("when there are no logs", func() {
 			It("returns empty collection", func() {
-				result, err := repo.GetUntransformedEventLogs()
+				result, err := repo.GetUntransformedEventLogs(0, 1)
 				Expect(err).NotTo(HaveOccurred())
 				Expect(len(result)).To(BeZero())
 			})
@@ -187,7 +180,7 @@ var _ = Describe("Header sync log repository", func() {
 			})
 
 			It("returns persisted logs", func() {
-				result, err := repo.GetUntransformedEventLogs()
+				result, err := repo.GetUntransformedEventLogs(0, 2)
 
 				Expect(err).NotTo(HaveOccurred())
 				Expect(len(result)).To(Equal(2))
@@ -200,7 +193,7 @@ var _ = Describe("Header sync log repository", func() {
 				_, insertErr := db.Exec(`UPDATE public.event_logs SET transformed = true WHERE tx_hash = $1`, log1.TxHash.Hex())
 				Expect(insertErr).NotTo(HaveOccurred())
 
-				result, err := repo.GetUntransformedEventLogs()
+				result, err := repo.GetUntransformedEventLogs(0, 2)
 
 				Expect(err).NotTo(HaveOccurred())
 				Expect(len(result)).To(Equal(1))
@@ -211,10 +204,24 @@ var _ = Describe("Header sync log repository", func() {
 				_, insertErr := db.Exec(`UPDATE public.event_logs SET transformed = true WHERE header_id = $1`, headerID)
 				Expect(insertErr).NotTo(HaveOccurred())
 
-				result, err := repo.GetUntransformedEventLogs()
+				result, err := repo.GetUntransformedEventLogs(0, 2)
 
 				Expect(err).NotTo(HaveOccurred())
 				Expect(len(result)).To(BeZero())
+			})
+
+			It("enables seeking logs with greater ID", func() {
+				limit := 1
+				resultOne, errOne := repo.GetUntransformedEventLogs(0, limit)
+				Expect(errOne).NotTo(HaveOccurred())
+				Expect(len(resultOne)).To(Equal(limit))
+
+				nextMinID := int(resultOne[0].ID)
+				resultTwo, errTwo := repo.GetUntransformedEventLogs(nextMinID, limit)
+				Expect(errTwo).NotTo(HaveOccurred())
+				Expect(len(resultTwo)).To(Equal(1))
+
+				Expect(resultTwo[0].ID > resultOne[0].ID).To(BeTrue())
 			})
 		})
 	})

@@ -18,6 +18,7 @@ package datastore
 
 import (
 	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/jmoiron/sqlx"
 	"github.com/makerdao/vulcanizedb/pkg/core"
 )
 
@@ -27,7 +28,6 @@ type AddressRepository interface {
 
 type CheckedHeadersRepository interface {
 	MarkHeaderChecked(headerID int64) error
-	MarkHeadersUncheckedSince(startingBlockNumber int64) error
 	MarkSingleHeaderUnchecked(blockNumber int64) error
 	UncheckedHeaders(startingBlockNumber, endingBlockNumber, checkCount int64) ([]core.Header, error)
 }
@@ -40,12 +40,15 @@ type CheckedLogsRepository interface {
 type HeaderRepository interface {
 	CreateOrUpdateHeader(header core.Header) (int64, error)
 	CreateTransactions(headerID int64, transactions []core.TransactionModel) error
-	GetHeader(blockNumber int64) (core.Header, error)
+	CreateTransactionInTx(tx *sqlx.Tx, headerID int64, transaction core.TransactionModel) (int64, error)
+	GetHeaderByBlockNumber(blockNumber int64) (core.Header, error)
+	GetHeaderByID(id int64) (core.Header, error)
 	GetHeadersInRange(startingBlock, endingBlock int64) ([]core.Header, error)
 	MissingBlockNumbers(startingBlockNumber, endingBlockNumber int64) ([]int64, error)
+	GetMostRecentHeaderBlockNumber() (int64, error)
 }
 
 type EventLogRepository interface {
-	GetUntransformedEventLogs() ([]core.EventLog, error)
+	GetUntransformedEventLogs(minID, limit int) ([]core.EventLog, error)
 	CreateEventLogs(headerID int64, logs []types.Log) error
 }

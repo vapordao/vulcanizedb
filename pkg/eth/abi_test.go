@@ -34,7 +34,7 @@ var _ = Describe("ABI files", func() {
 	Describe("Reading ABI files", func() {
 
 		It("loads a valid ABI file", func() {
-			path := test_config.ABIFilePath + "valid_abi.json"
+			path := test_config.ABIFilePath + "sample_abi.json"
 
 			contractAbi, err := eth.ParseAbiFile(path)
 
@@ -107,7 +107,7 @@ var _ = Describe("ABI files", func() {
 
 				It("should make a GET request with supplied contract hash", func() {
 
-					abi, err := client.GetAbi("0xd26114cd6EE289AccF82350c8d8487fedB8A0C07")
+					abi, err := client.GetAbi("0xd26114cd6EE289AccF82350c8d8487fedB8A0C07", "")
 					Expect(server.ReceivedRequests()).Should(HaveLen(1))
 					Expect(err).ShouldNot(HaveOccurred())
 					Expect(abi).Should(Equal(abiString))

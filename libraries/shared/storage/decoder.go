@@ -28,22 +28,24 @@ const (
 	bitsPerByte = 8
 )
 
-func Decode(diff types.PersistedDiff, metadata types.ValueMetadata) (interface{}, error) {
+func Decode(diff types.PersistedDiff, metadata types.ValueMetadata) interface{} {
 	switch metadata.Type {
 	case types.Uint256:
-		return decodeInteger(diff.StorageValue.Bytes()), nil
+		return decodeInteger(diff.StorageValue.Bytes())
+	case types.Uint8:
+		return decodeInteger(diff.StorageValue.Bytes())
 	case types.Uint32:
-		return decodeInteger(diff.StorageValue.Bytes()), nil
+		return decodeInteger(diff.StorageValue.Bytes())
 	case types.Uint48:
-		return decodeInteger(diff.StorageValue.Bytes()), nil
+		return decodeInteger(diff.StorageValue.Bytes())
 	case types.Uint128:
-		return decodeInteger(diff.StorageValue.Bytes()), nil
+		return decodeInteger(diff.StorageValue.Bytes())
 	case types.Address:
-		return decodeAddress(diff.StorageValue.Bytes()), nil
+		return decodeAddress(diff.StorageValue.Bytes())
 	case types.Bytes32:
-		return diff.StorageValue.Hex(), nil
+		return diff.StorageValue.Hex()
 	case types.PackedSlot:
-		return decodePackedSlot(diff.StorageValue.Bytes(), metadata.PackedTypes), nil
+		return decodePackedSlot(diff.StorageValue.Bytes(), metadata.PackedTypes)
 	default:
 		panic(fmt.Sprintf("can't decode unknown type: %d", metadata.Type))
 	}
@@ -86,7 +88,7 @@ func decodePackedSlot(raw []byte, packedTypes map[int]types.ValueType) map[int]s
 
 func decodeIndividualItem(itemBytes []byte, valueType types.ValueType) string {
 	switch valueType {
-	case types.Uint48, types.Uint128:
+	case types.Uint32, types.Uint48, types.Uint128:
 		return decodeInteger(itemBytes)
 	case types.Address:
 		return decodeAddress(itemBytes)
@@ -97,6 +99,8 @@ func decodeIndividualItem(itemBytes []byte, valueType types.ValueType) string {
 
 func getNumberOfBytes(valueType types.ValueType) int {
 	switch valueType {
+	case types.Uint32:
+		return 32 / bitsPerByte
 	case types.Uint48:
 		return 48 / bitsPerByte
 	case types.Uint128:

@@ -21,18 +21,30 @@ import (
 	"github.com/ethereum/go-ethereum/statediff"
 	"github.com/makerdao/vulcanizedb/libraries/shared/storage/types"
 	"github.com/makerdao/vulcanizedb/libraries/shared/streamer"
+	"github.com/makerdao/vulcanizedb/pkg/fs"
 	"github.com/sirupsen/logrus"
+)
+
+type GethPatchVersion int
+
+const (
+	OldGethPatch GethPatchVersion = iota
+	NewGethPatch
 )
 
 type GethRpcStorageFetcher struct {
 	statediffPayloadChan chan statediff.Payload
 	streamer             streamer.Streamer
+	gethVersion          GethPatchVersion
+	statusWriter         fs.StatusWriter
 }
 
-func NewGethRpcStorageFetcher(streamer streamer.Streamer, statediffPayloadChan chan statediff.Payload) GethRpcStorageFetcher {
+func NewGethRpcStorageFetcher(streamer streamer.Streamer, statediffPayloadChan chan statediff.Payload, gethVersion GethPatchVersion, statusWriter fs.StatusWriter) GethRpcStorageFetcher {
 	return GethRpcStorageFetcher{
 		statediffPayloadChan: statediffPayloadChan,
 		streamer:             streamer,
+		gethVersion:          gethVersion,
+		statusWriter:         statusWriter,
 	}
 }
 
@@ -44,6 +56,11 @@ func (fetcher GethRpcStorageFetcher) FetchStorageDiffs(out chan<- types.RawDiff,
 		panic(fmt.Sprintf("Error creating a geth client subscription: %v", clientSubErr))
 	}
 	logrus.Info("Successfully created a geth client subscription: ", clientSubscription)
+
+	writeErr := fetcher.statusWriter.Write()
+	if writeErr != nil {
+		errs <- writeErr
+	}
 
 	for {
 		select {
@@ -65,7 +82,7 @@ func (fetcher GethRpcStorageFetcher) FetchStorageDiffs(out chan<- types.RawDiff,
 			for _, account := range accounts {
 				logrus.Trace(fmt.Sprintf("iterating through %d Storage values on account", len(account.Storage)))
 				for _, accountStorage := range account.Storage {
-					diff, formatErr := types.FromGethStateDiff(account, stateDiff, accountStorage)
+					diff, formatErr := fetcher.formatDiff(account, stateDiff, accountStorage)
 					logrus.Tracef("adding storage diff to out channel. keccak of address: %v, block height: %v, storage key: %v, storage value: %v",
 						diff.HashedAddress.Hex(), diff.BlockHeight, diff.StorageKey.Hex(), diff.StorageValue.Hex())
 					if formatErr != nil {
@@ -77,6 +94,14 @@ func (fetcher GethRpcStorageFetcher) FetchStorageDiffs(out chan<- types.RawDiff,
 			}
 		}
 
+	}
+}
+
+func (fetcher GethRpcStorageFetcher) formatDiff(account statediff.AccountDiff, stateDiff *statediff.StateDiff, storage statediff.StorageDiff) (types.RawDiff, error) {
+	if fetcher.gethVersion == OldGethPatch {
+		return types.FromOldGethStateDiff(account, stateDiff, storage)
+	} else {
+		return types.FromNewGethStateDiff(account, stateDiff, storage)
 	}
 }
 

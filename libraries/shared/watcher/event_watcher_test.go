@@ -38,13 +38,15 @@ var _ = Describe("Event Watcher", func() {
 		delegator    *mocks.MockLogDelegator
 		extractor    *mocks.MockLogExtractor
 		eventWatcher watcher.EventWatcher
+		statusWriter fakes.MockStatusWriter
 	)
 
 	BeforeEach(func() {
 		delegator = &mocks.MockLogDelegator{}
 		extractor = &mocks.MockLogExtractor{}
 		bc := fakes.MockBlockChain{}
-		eventWatcher = watcher.NewEventWatcher(nil, &bc, extractor, delegator, 0, time.Nanosecond)
+		statusWriter = fakes.MockStatusWriter{}
+		eventWatcher = watcher.NewEventWatcher(nil, &bc, extractor, delegator, 0, time.Nanosecond, &statusWriter)
 	})
 
 	Describe("AddTransformers", func() {
@@ -84,6 +86,15 @@ var _ = Describe("Event Watcher", func() {
 	})
 
 	Describe("Execute", func() {
+		It("creates file for health check", func() {
+			extractor.ExtractLogsErrors = []error{nil, errExecuteClosed}
+
+			err := eventWatcher.Execute(constants.HeaderUnchecked)
+
+			Expect(err).To(MatchError(errExecuteClosed))
+			Expect(statusWriter.WriteCalled).To(BeTrue())
+		})
+
 		It("extracts watched logs", func() {
 			extractor.ExtractLogsErrors = []error{nil, errExecuteClosed}
 
@@ -160,6 +171,15 @@ var _ = Describe("Event Watcher", func() {
 
 			Expect(err).To(MatchError(errExecuteClosed))
 			Expect(delegator.DelegateCallCount > 0).To(BeTrue())
+		})
+
+		It("passes results limit to delegator", func() {
+			delegator.DelegateErrors = []error{nil, errExecuteClosed}
+
+			err := eventWatcher.Execute(constants.HeaderUnchecked)
+
+			Expect(err).To(MatchError(errExecuteClosed))
+			Expect(delegator.DelegatePassedLimit).To(Equal(watcher.ResultsLimit))
 		})
 
 		It("returns error if delegating logs fails", func() {

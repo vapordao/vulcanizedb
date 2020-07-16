@@ -14,29 +14,22 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-package fakes
+package event_test
 
 import (
-	"github.com/ethereum/go-ethereum/core/types"
-	"github.com/makerdao/vulcanizedb/pkg/core"
+	"io/ioutil"
+	"testing"
+
+	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/gomega"
+	"github.com/sirupsen/logrus"
 )
 
-type MockEventLogRepository struct {
-	CreateError    error
-	GetCalled      bool
-	GetError       error
-	PassedHeaderID int64
-	PassedLogs     []types.Log
-	ReturnLogs     []core.EventLog
+func TestEvent(t *testing.T) {
+	RegisterFailHandler(Fail)
+	RunSpecs(t, "Event Factories Suite")
 }
 
-func (repository *MockEventLogRepository) GetUntransformedEventLogs() ([]core.EventLog, error) {
-	repository.GetCalled = true
-	return repository.ReturnLogs, repository.GetError
-}
-
-func (repository *MockEventLogRepository) CreateEventLogs(headerID int64, logs []types.Log) error {
-	repository.PassedHeaderID = headerID
-	repository.PassedLogs = logs
-	return repository.CreateError
-}
+var _ = BeforeSuite(func() {
+	logrus.SetOutput(ioutil.Discard)
+})
