@@ -398,24 +398,53 @@ var _ = Describe("Log extractor", func() {
 				Topic:               fakes.FakeHash.Hex(),
 				StartingBlockNumber: rand.Int63(),
 			}
-			extractor.AddTransformerConfig(fakeConfig)
+			addErr := extractor.AddTransformerConfig(fakeConfig)
+			Expect(addErr).NotTo(HaveOccurred())
 			mockHeaderRepository := &fakes.MockHeaderRepository{}
 			extractor.HeaderRepository = mockHeaderRepository
-			endingBlock := rand.Int63()
+			endingBlock := fakeConfig.StartingBlockNumber + 1
 
 			_ = extractor.BackFillLogs(endingBlock)
 
-			Expect(mockHeaderRepository.GetHeadersInRangeStartingBlock).To(Equal(fakeConfig.StartingBlockNumber))
-			Expect(mockHeaderRepository.GetHeadersInRangeEndingBlock).To(Equal(endingBlock))
+			Expect(mockHeaderRepository.GetHeadersInRangeStartingBlocks).To(ContainElement(fakeConfig.StartingBlockNumber))
+			Expect(mockHeaderRepository.GetHeadersInRangeEndingBlocks).To(ContainElement(endingBlock))
+		})
+
+		It("chunks headers if range greater than interval defined by HeaderChunkSize", func() {
+			fakeConfig := event.TransformerConfig{
+				ContractAddresses:   []string{fakes.FakeAddress.Hex()},
+				Topic:               fakes.FakeHash.Hex(),
+				StartingBlockNumber: rand.Int63(),
+			}
+
+			addErr := extractor.AddTransformerConfig(fakeConfig)
+			Expect(addErr).NotTo(HaveOccurred())
+			mockHeaderRepository := &fakes.MockHeaderRepository{}
+			extractor.HeaderRepository = mockHeaderRepository
+			endingBlock := fakeConfig.StartingBlockNumber + logs.HeaderChunkSize*2
+
+			_ = extractor.BackFillLogs(endingBlock)
+
+			Expect(mockHeaderRepository.GetHeadersInRangeStartingBlocks).To(ConsistOf([]int64{
+				fakeConfig.StartingBlockNumber,
+				fakeConfig.StartingBlockNumber + logs.HeaderChunkSize,
+			}))
+			Expect(mockHeaderRepository.GetHeadersInRangeEndingBlocks).To(ConsistOf([]int64{
+				fakeConfig.StartingBlockNumber + logs.HeaderChunkSize - 1,
+				fakeConfig.StartingBlockNumber + logs.HeaderChunkSize*2 - 1,
+			}))
 		})
 
 		It("returns error if getting headers in range returns error", func() {
 			mockHeaderRepository := &fakes.MockHeaderRepository{}
 			mockHeaderRepository.GetHeadersInRangeError = fakes.FakeError
 			extractor.HeaderRepository = mockHeaderRepository
-			addTransformerConfig(extractor)
+			startingBlock := rand.Int63()
+			fakeConfig := getTransformerConfig(startingBlock, startingBlock+1)
+			addErr := extractor.AddTransformerConfig(fakeConfig)
+			Expect(addErr).NotTo(HaveOccurred())
 
-			err := extractor.BackFillLogs(0)
+			err := extractor.BackFillLogs(startingBlock + 1)
 
 			Expect(err).To(HaveOccurred())
 			Expect(err).To(MatchError(fakes.FakeError))
@@ -424,11 +453,14 @@ var _ = Describe("Log extractor", func() {
 		It("does nothing if no headers found", func() {
 			mockHeaderRepository := &fakes.MockHeaderRepository{}
 			extractor.HeaderRepository = mockHeaderRepository
-			addTransformerConfig(extractor)
+			startingBlock := rand.Int63()
+			fakeConfig := getTransformerConfig(startingBlock, startingBlock+1)
+			addErr := extractor.AddTransformerConfig(fakeConfig)
+			Expect(addErr).NotTo(HaveOccurred())
 			mockLogFetcher := &mocks.MockLogFetcher{}
 			extractor.Fetcher = mockLogFetcher
 
-			_ = extractor.BackFillLogs(0)
+			_ = extractor.BackFillLogs(startingBlock + 1)
 
 			Expect(mockLogFetcher.FetchCalled).To(BeFalse())
 		})
@@ -445,7 +477,7 @@ var _ = Describe("Log extractor", func() {
 			mockLogFetcher := &mocks.MockLogFetcher{}
 			extractor.Fetcher = mockLogFetcher
 
-			err := extractor.BackFillLogs(0)
+			err := extractor.BackFillLogs(config.StartingBlockNumber + 1)
 
 			Expect(err).NotTo(HaveOccurred())
 			Expect(mockLogFetcher.FetchCalled).To(BeTrue())
@@ -457,12 +489,15 @@ var _ = Describe("Log extractor", func() {
 
 		It("returns error if fetching logs fails", func() {
 			addHeaderInRange(extractor)
-			addTransformerConfig(extractor)
+			startingBlock := rand.Int63()
+			fakeConfig := getTransformerConfig(startingBlock, startingBlock+1)
+			addErr := extractor.AddTransformerConfig(fakeConfig)
+			Expect(addErr).NotTo(HaveOccurred())
 			mockLogFetcher := &mocks.MockLogFetcher{}
 			mockLogFetcher.ReturnError = fakes.FakeError
 			extractor.Fetcher = mockLogFetcher
 
-			err := extractor.BackFillLogs(0)
+			err := extractor.BackFillLogs(startingBlock + 1)
 
 			Expect(err).To(HaveOccurred())
 			Expect(err).To(MatchError(fakes.FakeError))
@@ -470,11 +505,14 @@ var _ = Describe("Log extractor", func() {
 
 		It("does not sync transactions when no logs", func() {
 			addHeaderInRange(extractor)
-			addTransformerConfig(extractor)
+			startingBlock := rand.Int63()
+			fakeConfig := getTransformerConfig(startingBlock, startingBlock+1)
+			addErr := extractor.AddTransformerConfig(fakeConfig)
+			Expect(addErr).NotTo(HaveOccurred())
 			mockTransactionSyncer := &fakes.MockTransactionSyncer{}
 			extractor.Syncer = mockTransactionSyncer
 
-			err := extractor.BackFillLogs(0)
+			err := extractor.BackFillLogs(startingBlock + 1)
 
 			Expect(err).NotTo(HaveOccurred())
 			Expect(mockTransactionSyncer.SyncTransactionsCalled).To(BeFalse())
@@ -484,11 +522,14 @@ var _ = Describe("Log extractor", func() {
 			It("syncs transactions", func() {
 				addHeaderInRange(extractor)
 				addFetchedLog(extractor)
-				addTransformerConfig(extractor)
+				startingBlock := rand.Int63()
+				fakeConfig := getTransformerConfig(startingBlock, startingBlock+1)
+				addErr := extractor.AddTransformerConfig(fakeConfig)
+				Expect(addErr).NotTo(HaveOccurred())
 				mockTransactionSyncer := &fakes.MockTransactionSyncer{}
 				extractor.Syncer = mockTransactionSyncer
 
-				err := extractor.BackFillLogs(0)
+				err := extractor.BackFillLogs(startingBlock + 1)
 
 				Expect(err).NotTo(HaveOccurred())
 				Expect(mockTransactionSyncer.SyncTransactionsCalled).To(BeTrue())
@@ -497,12 +538,15 @@ var _ = Describe("Log extractor", func() {
 			It("returns error if syncing transactions fails", func() {
 				addHeaderInRange(extractor)
 				addFetchedLog(extractor)
-				addTransformerConfig(extractor)
+				startingBlock := rand.Int63()
+				fakeConfig := getTransformerConfig(startingBlock, startingBlock+1)
+				addErr := extractor.AddTransformerConfig(fakeConfig)
+				Expect(addErr).NotTo(HaveOccurred())
 				mockTransactionSyncer := &fakes.MockTransactionSyncer{}
 				mockTransactionSyncer.SyncTransactionsError = fakes.FakeError
 				extractor.Syncer = mockTransactionSyncer
 
-				err := extractor.BackFillLogs(0)
+				err := extractor.BackFillLogs(startingBlock + 1)
 
 				Expect(err).To(HaveOccurred())
 				Expect(err).To(MatchError(fakes.FakeError))
@@ -510,7 +554,10 @@ var _ = Describe("Log extractor", func() {
 
 			It("persists fetched logs", func() {
 				addHeaderInRange(extractor)
-				addTransformerConfig(extractor)
+				startingBlock := rand.Int63()
+				fakeConfig := getTransformerConfig(startingBlock, startingBlock+1)
+				addErr := extractor.AddTransformerConfig(fakeConfig)
+				Expect(addErr).NotTo(HaveOccurred())
 				fakeLogs := []types.Log{{
 					Address: common.HexToAddress("0xA"),
 					Topics:  []common.Hash{common.HexToHash("0xA")},
@@ -522,7 +569,7 @@ var _ = Describe("Log extractor", func() {
 				mockLogRepository := &fakes.MockEventLogRepository{}
 				extractor.LogRepository = mockLogRepository
 
-				err := extractor.BackFillLogs(0)
+				err := extractor.BackFillLogs(startingBlock + 1)
 
 				Expect(err).NotTo(HaveOccurred())
 				Expect(mockLogRepository.PassedLogs).To(Equal(fakeLogs))
@@ -531,16 +578,48 @@ var _ = Describe("Log extractor", func() {
 			It("returns error if persisting logs fails", func() {
 				addHeaderInRange(extractor)
 				addFetchedLog(extractor)
-				addTransformerConfig(extractor)
+				startingBlock := rand.Int63()
+				fakeConfig := getTransformerConfig(startingBlock, startingBlock+1)
+				addErr := extractor.AddTransformerConfig(fakeConfig)
+				Expect(addErr).NotTo(HaveOccurred())
 				mockLogRepository := &fakes.MockEventLogRepository{}
 				mockLogRepository.CreateError = fakes.FakeError
 				extractor.LogRepository = mockLogRepository
 
-				err := extractor.BackFillLogs(0)
+				err := extractor.BackFillLogs(startingBlock + 1)
 
 				Expect(err).To(HaveOccurred())
 				Expect(err).To(MatchError(fakes.FakeError))
 			})
+		})
+	})
+
+	Describe("ChunkRanges", func() {
+		It("returns error if upper bound <= lower bound", func() {
+			_, err := logs.ChunkRanges(10, 10, 1)
+
+			Expect(err).To(HaveOccurred())
+		})
+
+		It("chunks items in range by interval", func() {
+			res, err := logs.ChunkRanges(1, 20, 10)
+
+			Expect(err).NotTo(HaveOccurred())
+			Expect(res).To(ConsistOf([][]int64{
+				{1, 10},
+				{11, 20},
+			}))
+		})
+
+		It("truncates final chunk to end at upper bound", func() {
+			res, err := logs.ChunkRanges(1, 25, 10)
+
+			Expect(err).NotTo(HaveOccurred())
+			Expect(res).To(ConsistOf([][]int64{
+				{1, 10},
+				{11, 20},
+				{21, 25},
+			}))
 		})
 	})
 })

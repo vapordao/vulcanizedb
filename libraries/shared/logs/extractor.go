@@ -33,8 +33,9 @@ import (
 )
 
 var (
-	ErrNoUncheckedHeaders = errors.New("no unchecked headers available for log fetching")
-	ErrNoWatchedAddresses = errors.New("no watched addresses configured in the log extractor")
+	ErrNoUncheckedHeaders       = errors.New("no unchecked headers available for log fetching")
+	ErrNoWatchedAddresses       = errors.New("no watched addresses configured in the log extractor")
+	HeaderChunkSize       int64 = 1000
 )
 
 type ILogExtractor interface {
@@ -153,19 +154,50 @@ func (extractor LogExtractor) BackFillLogs(endingBlock int64) error {
 		return fmt.Errorf("error extracting logs: %w", ErrNoWatchedAddresses)
 	}
 
-	headers, headersErr := extractor.HeaderRepository.GetHeadersInRange(*extractor.StartingBlock, endingBlock)
-	if headersErr != nil {
-		logrus.Errorf("error fetching missing headers: %s", headersErr)
-		return fmt.Errorf("error getting unchecked headers to check for logs: %w", headersErr)
+	ranges, chunkErr := ChunkRanges(*extractor.StartingBlock, endingBlock, HeaderChunkSize)
+	if chunkErr != nil {
+		return fmt.Errorf("error chunking headers to lookup in logs backfill: %w", chunkErr)
 	}
 
-	for _, header := range headers {
-		err := extractor.fetchAndPersistLogsForHeader(header)
-		if err != nil {
-			return fmt.Errorf("error fetching and persisting logs for header with id %d: %w", header.Id, err)
+	for _, r := range ranges {
+		headers, headersErr := extractor.HeaderRepository.GetHeadersInRange(r[0], r[1])
+		if headersErr != nil {
+			logrus.Errorf("error fetching missing headers: %s", headersErr)
+			return fmt.Errorf("error getting unchecked headers to check for logs: %w", headersErr)
+		}
+
+		for _, header := range headers {
+			err := extractor.fetchAndPersistLogsForHeader(header)
+			if err != nil {
+				return fmt.Errorf("error fetching and persisting logs for header with id %d: %w", header.Id, err)
+			}
 		}
 	}
+
 	return nil
+}
+
+func ChunkRanges(startingBlock, endingBlock, interval int64) ([][]int64, error) {
+	if endingBlock <= startingBlock {
+		return nil, errors.New("ending block for backfill not > starting block")
+	}
+
+	totalLength := endingBlock - startingBlock
+	numIntervals := totalLength / interval
+	if totalLength%interval != 0 {
+		numIntervals++
+	}
+
+	results := make([][]int64, numIntervals)
+	for i := int64(0); i < numIntervals; i++ {
+		nextStartBlock := startingBlock + i*interval
+		nextEndingBlock := startingBlock + i*interval + interval - 1
+		if nextEndingBlock > endingBlock {
+			nextEndingBlock = endingBlock
+		}
+		results[i] = []int64{nextStartBlock, nextEndingBlock}
+	}
+	return results, nil
 }
 
 func logError(description string, err error, header core.Header) {
