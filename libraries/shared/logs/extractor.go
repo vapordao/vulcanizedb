@@ -32,10 +32,14 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
+type BlockIdentifier string
+
 var (
-	ErrNoUncheckedHeaders       = errors.New("no unchecked headers available for log fetching")
-	ErrNoWatchedAddresses       = errors.New("no watched addresses configured in the log extractor")
-	HeaderChunkSize       int64 = 1000
+	StartInterval         BlockIdentifier = "start"
+	EndInterval           BlockIdentifier = "end"
+	ErrNoUncheckedHeaders                 = errors.New("no unchecked headers available for log fetching")
+	ErrNoWatchedAddresses                 = errors.New("no watched addresses configured in the log extractor")
+	HeaderChunkSize       int64           = 1000
 )
 
 type ILogExtractor interface {
@@ -160,7 +164,7 @@ func (extractor LogExtractor) BackFillLogs(endingBlock int64) error {
 	}
 
 	for _, r := range ranges {
-		headers, headersErr := extractor.HeaderRepository.GetHeadersInRange(r[0], r[1])
+		headers, headersErr := extractor.HeaderRepository.GetHeadersInRange(r[StartInterval], r[EndInterval])
 		if headersErr != nil {
 			logrus.Errorf("error fetching missing headers: %s", headersErr)
 			return fmt.Errorf("error getting unchecked headers to check for logs: %w", headersErr)
@@ -177,7 +181,7 @@ func (extractor LogExtractor) BackFillLogs(endingBlock int64) error {
 	return nil
 }
 
-func ChunkRanges(startingBlock, endingBlock, interval int64) ([][]int64, error) {
+func ChunkRanges(startingBlock, endingBlock, interval int64) ([]map[BlockIdentifier]int64, error) {
 	if endingBlock <= startingBlock {
 		return nil, errors.New("ending block for backfill not > starting block")
 	}
@@ -188,14 +192,18 @@ func ChunkRanges(startingBlock, endingBlock, interval int64) ([][]int64, error) 
 		numIntervals++
 	}
 
-	results := make([][]int64, numIntervals)
+	results := make([]map[BlockIdentifier]int64, numIntervals)
 	for i := int64(0); i < numIntervals; i++ {
 		nextStartBlock := startingBlock + i*interval
-		nextEndingBlock := startingBlock + i*interval + interval - 1
+		nextEndingBlock := nextStartBlock + interval - 1
 		if nextEndingBlock > endingBlock {
 			nextEndingBlock = endingBlock
 		}
-		results[i] = []int64{nextStartBlock, nextEndingBlock}
+		nextInterval := map[BlockIdentifier]int64{
+			StartInterval: nextStartBlock,
+			EndInterval:   nextEndingBlock,
+		}
+		results[i] = nextInterval
 	}
 	return results, nil
 }
