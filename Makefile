@@ -99,7 +99,7 @@ checkmigname:
 .PHONY: rollback
 rollback: checkdbvars
 	$(GOOSE) -dir db/migrations postgres "$(CONNECT_STRING)" down
-	pg_dump -O -s $(CONNECT_STRING) > db/schema.sql
+	pg_dump -n 'public' -O -s $(CONNECT_STRING) > db/schema.sql
 
 
 ## Rollbackt to a select migration (id/timestamp)
@@ -111,7 +111,7 @@ rollback_to: checkmigration checkdbvars
 .PHONY: migrate
 migrate: checkdbvars
 	$(GOOSE) -dir db/migrations postgres "$(CONNECT_STRING)" up
-	pg_dump -O -s $(CONNECT_STRING) > db/schema.sql
+	pg_dump -n 'public' -O -s $(CONNECT_STRING) > db/schema.sql
 
 ## Create a new migration file
 .PHONY: new_migration
