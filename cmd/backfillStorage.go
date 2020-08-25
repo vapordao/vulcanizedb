@@ -64,7 +64,8 @@ func backfillStorage() error {
 	}
 
 	if len(storageInitializers) == 0 {
-		return fmt.Errorf("SubCommand %v: no storage transformers found in the given config", SubCommand)
+		logrus.Warn("not back-filling storage because no contracts configured for back-fill")
+		return nil
 	}
 
 	var loader backfill.StorageValueLoader
