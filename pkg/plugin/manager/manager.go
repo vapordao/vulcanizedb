@@ -67,6 +67,10 @@ func (m *manager) setDB() error {
 }
 
 func (m *manager) RunMigrations() error {
+	if len(m.GenConfig.Schema) <= 0 {
+		return fmt.Errorf("config is missing a schema, required for plugin migrations")
+	}
+
 	// Get paths to db migrations from the plugin config
 	paths, err := m.GenConfig.GetMigrationsPaths()
 	if err != nil {
@@ -75,12 +79,20 @@ func (m *manager) RunMigrations() error {
 	if len(paths) < 1 {
 		return nil
 	}
+
 	// Init directory for temporary copies of migrations
 	err = m.setupMigrationEnv()
 	if err != nil {
 		return err
 	}
 	defer m.cleanUp()
+
+	// First run the public schema migrations
+	err = m.runPublicMigrations()
+	if err != nil {
+		return err
+	}
+
 	// Creates copies of migrations for all the plugin's transformers in a tmp dir
 	err = m.createMigrationCopies(paths)
 	if err != nil {
@@ -88,6 +100,38 @@ func (m *manager) RunMigrations() error {
 	}
 
 	return nil
+}
+
+func (m *manager) runPublicMigrations() error {
+	// Setup DB if not set
+	if m.db == nil {
+		setErr := m.setDB()
+		if setErr != nil {
+			return errors.New(fmt.Sprintf("could not open db: %s", setErr.Error()))
+		}
+	}
+
+	goose.SetTableName("public.goose_db_version")
+
+	// Fix the migrations
+	path, err := helpers.CleanPath(filepath.Join("$GOPATH/src", m.GenConfig.Home, "db", "migrations"))
+
+	if err != nil {
+		return err
+	}
+
+	fixErr := goose.Fix(path)
+	if fixErr != nil {
+		return errors.New(fmt.Sprintf("version fixing for plugin migrations at %s failed: %s", path, fixErr.Error()))
+	}
+
+	// Run the copied migrations with goose
+	upErr := goose.Up(m.db, path)
+	if upErr != nil {
+		return errors.New(fmt.Sprintf("db migrations for plugin transformers at %s failed: %s", path, upErr.Error()))
+	}
+	return nil
+
 }
 
 // Setup a temporary directory to hold transformer db migrations
@@ -149,11 +193,20 @@ func (m *manager) fixAndRun(path string) error {
 			return errors.New(fmt.Sprintf("could not open db: %s", setErr.Error()))
 		}
 	}
+
+	_, execErr := m.db.Exec(fmt.Sprintf("CREATE SCHEMA IF NOT EXISTS %s", m.GenConfig.Schema))
+	if execErr != nil {
+		return execErr
+	}
+
+	goose.SetTableName(fmt.Sprintf("%s.goose_db_version", m.GenConfig.Schema))
+
 	// Fix the migrations
 	fixErr := goose.Fix(m.tmpMigDir)
 	if fixErr != nil {
 		return errors.New(fmt.Sprintf("version fixing for plugin migrations at %s failed: %s", path, fixErr.Error()))
 	}
+
 	// Run the copied migrations with goose
 	upErr := goose.Up(m.db, m.tmpMigDir)
 	if upErr != nil {
