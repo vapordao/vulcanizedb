@@ -42,6 +42,11 @@ func backFillEvents() error {
 		LogWithCommand.Fatalf("SubCommand %v: exporting transformers failed: %v", SubCommand, exportTransformersErr)
 	}
 
+	if len(ethEventInitializers) < 1 {
+		logrus.Warn("not back-filling events because no transformers configured for back-fill")
+		return nil
+	}
+
 	blockChain := getBlockChain()
 	db := utils.LoadPostgres(databaseConfig, blockChain.Node())
 
