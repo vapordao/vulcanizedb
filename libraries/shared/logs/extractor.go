@@ -67,6 +67,7 @@ func NewLogExtractor(db *postgres.DB, bc core.BlockChain) *LogExtractor {
 		CheckedHeadersRepository: repositories.NewCheckedHeadersRepository(db),
 		CheckedLogsRepository:    repositories.NewCheckedLogsRepository(db),
 		Fetcher:                  fetcher.NewLogFetcher(bc),
+		HeaderRepository:         repositories.NewHeaderRepository(db),
 		LogRepository:            repositories.NewEventLogRepository(db),
 		Syncer:                   transactions.NewTransactionsSyncer(db, bc),
 		RecheckHeaderCap:         constants.RecheckHeaderCap,
