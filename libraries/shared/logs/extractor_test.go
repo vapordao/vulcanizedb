@@ -170,7 +170,8 @@ var _ = Describe("Log extractor", func() {
 				mockCheckedHeadersRepository.UncheckedHeadersReturnHeaders = []core.Header{{}}
 				extractor.CheckedHeadersRepository = mockCheckedHeadersRepository
 				startingBlockNumber := rand.Int63()
-				extractor.AddTransformerConfig(getTransformerConfig(startingBlockNumber, defaultEndingBlockNumber))
+				addErr := extractor.AddTransformerConfig(getTransformerConfig(startingBlockNumber, defaultEndingBlockNumber))
+				Expect(addErr).NotTo(HaveOccurred())
 
 				err := extractor.ExtractLogs(constants.HeaderUnchecked)
 
@@ -187,7 +188,8 @@ var _ = Describe("Log extractor", func() {
 				mockCheckedHeadersRepository.UncheckedHeadersReturnHeaders = []core.Header{{}}
 				extractor.CheckedHeadersRepository = mockCheckedHeadersRepository
 				startingBlockNumber := rand.Int63()
-				extractor.AddTransformerConfig(getTransformerConfig(startingBlockNumber, defaultEndingBlockNumber))
+				addErr := extractor.AddTransformerConfig(getTransformerConfig(startingBlockNumber, defaultEndingBlockNumber))
+				Expect(addErr).NotTo(HaveOccurred())
 
 				err := extractor.ExtractLogs(constants.HeaderRecheck)
 
@@ -594,7 +596,8 @@ func addTransformerConfig(extractor *logs.LogExtractor) int64 {
 		Topic:               fakes.FakeHash.Hex(),
 		StartingBlockNumber: rand.Int63(),
 	}
-	extractor.AddTransformerConfig(fakeConfig)
+	addErr := extractor.AddTransformerConfig(fakeConfig)
+	Expect(addErr).NotTo(HaveOccurred())
 	return fakeConfig.StartingBlockNumber
 }
 
