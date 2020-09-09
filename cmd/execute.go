@@ -77,7 +77,8 @@ func init() {
 	executeCmd.Flags().BoolVarP(&recheckHeadersArg, "recheck-headers", "r", false, "whether to re-check headers for watched events")
 	executeCmd.Flags().DurationVarP(&retryInterval, "retry-interval", "i", 7*time.Second, "interval duration between retries on execution error")
 	executeCmd.Flags().IntVarP(&maxUnexpectedErrors, "max-unexpected-errs", "m", 5, "maximum number of unexpected errors to allow (with retries) before exiting")
-	executeCmd.Flags().Int64VarP(&diffBlockFromHeadOfChain, "diff-blocks-from-head", "d", -1, "number of blocks from head of chain to start reprocessing diffs, defaults to -1 so all diffs are processsed")
+	executeCmd.Flags().Int64VarP(&newDiffBlockFromHeadOfChain, "new-diff-blocks-from-head", "d", -1, "number of blocks from head of chain to start reprocessing new diffs, defaults to -1 so all diffs are processsed")
+	executeCmd.Flags().Int64VarP(&unrecognizedDiffBlockFromHeadOfChain, "unrecognized-diff-blocks-from-head", "u", -1, "number of blocks from head of chain to start reprocessing unrecognized diffs, defaults to -1 so all diffs are processsed")
 }
 
 func executeTransformers() {
@@ -109,12 +110,19 @@ func executeTransformers() {
 	}
 
 	if len(ethStorageInitializers) > 0 {
-		storageHealthCheckMessage := []byte("storage watcher starting\n")
-		statusWriter := fs.NewStatusWriter(healthCheckFile, storageHealthCheckMessage)
-		sw := watcher.NewStorageWatcher(&db, diffBlockFromHeadOfChain, statusWriter)
-		sw.AddTransformers(ethStorageInitializers)
+		newDiffStorageHealthCheckMessage := []byte("storage watcher for new diffs starting\n")
+		newDiffStatusWriter := fs.NewStatusWriter(healthCheckFile, newDiffStorageHealthCheckMessage)
+		newDiffStorageWatcher := watcher.NewStorageWatcher(&db, newDiffBlockFromHeadOfChain, newDiffStatusWriter, watcher.New)
+		newDiffStorageWatcher.AddTransformers(ethStorageInitializers)
 		wg.Add(1)
-		go watchEthStorage(&sw, &wg)
+		go watchEthStorage(&newDiffStorageWatcher, &wg)
+
+		unrecognizedDiffStorageHealthCheckMessage := []byte("storage watcher for unrecognized diffs starting\n")
+		unrecognizedDiffStatusWriter := fs.NewStatusWriter(healthCheckFile, unrecognizedDiffStorageHealthCheckMessage)
+		unrecognizedDiffStorageWatcher := watcher.NewStorageWatcher(&db, unrecognizedDiffBlockFromHeadOfChain, unrecognizedDiffStatusWriter, watcher.Unrecognized)
+		unrecognizedDiffStorageWatcher.AddTransformers(ethStorageInitializers)
+		wg.Add(1)
+		go watchEthStorage(&unrecognizedDiffStorageWatcher, &wg)
 	}
 
 	if len(ethContractInitializers) > 0 {

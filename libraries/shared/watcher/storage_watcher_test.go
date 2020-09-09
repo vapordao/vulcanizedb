@@ -39,7 +39,7 @@ var _ = Describe("Storage Watcher", func() {
 		It("adds transformers", func() {
 			fakeAddress := fakes.FakeAddress
 			fakeTransformer := &mocks.MockStorageTransformer{Address: fakeAddress}
-			w := watcher.NewStorageWatcher(test_config.NewTestDB(test_config.NewTestNode()), -1, &statusWriter)
+			w := watcher.NewStorageWatcher(test_config.NewTestDB(test_config.NewTestNode()), -1, &statusWriter, watcher.New)
 
 			w.AddTransformers([]storage.TransformerInitializer{fakeTransformer.FakeTransformerInitializer})
 
@@ -48,36 +48,72 @@ var _ = Describe("Storage Watcher", func() {
 	})
 
 	Describe("Execute", func() {
-		var (
-			storageWatcher       watcher.StorageWatcher
-			mockDiffsRepository  *mocks.MockStorageDiffRepository
-			mockHeaderRepository *fakes.MockHeaderRepository
-		)
-
-		BeforeEach(func() {
-			mockDiffsRepository = &mocks.MockStorageDiffRepository{}
-			mockHeaderRepository = &fakes.MockHeaderRepository{}
-			storageWatcher = watcher.NewStorageWatcher(test_config.NewTestDB(test_config.NewTestNode()), -1, &statusWriter)
-			storageWatcher.HeaderRepository = mockHeaderRepository
-			storageWatcher.StorageDiffRepository = mockDiffsRepository
+		When("a watcher is configured to watches 'new' storage diffs", func() {
+			statusWriter := fakes.MockStatusWriter{}
+			storageWatcher := watcher.NewStorageWatcher(test_config.NewTestDB(test_config.NewTestNode()), -1, &statusWriter, watcher.New)
+			input := ExecuteInput{
+				watcher:      &storageWatcher,
+				statusWriter: &statusWriter,
+			}
+			SharedExecuteBehavior(&input)
 		})
 
+		When("a watcher is configured to watches 'unrecognized' storage diffs", func() {
+			statusWriter := fakes.MockStatusWriter{}
+			storageWatcher := watcher.NewStorageWatcher(test_config.NewTestDB(test_config.NewTestNode()), -1, &statusWriter, watcher.Unrecognized)
+			input := ExecuteInput{
+				watcher:      &storageWatcher,
+				statusWriter: &statusWriter,
+			}
+			SharedExecuteBehavior(&input)
+		})
+	})
+})
+
+type ExecuteInput struct {
+	watcher      *watcher.StorageWatcher
+	statusWriter *fakes.MockStatusWriter
+}
+
+func SharedExecuteBehavior(input *ExecuteInput) {
+	var (
+		mockDiffsRepository  *mocks.MockStorageDiffRepository
+		mockHeaderRepository *fakes.MockHeaderRepository
+		statusWriter         = input.statusWriter
+		storageWatcher       = input.watcher
+		contractAddress      common.Address
+		mockTransformer      *mocks.MockStorageTransformer
+	)
+
+	BeforeEach(func() {
+		mockDiffsRepository = &mocks.MockStorageDiffRepository{}
+		mockHeaderRepository = &fakes.MockHeaderRepository{}
+		contractAddress = test_data.FakeAddress()
+		mockTransformer = &mocks.MockStorageTransformer{Address: contractAddress}
+		storageWatcher.HeaderRepository = mockHeaderRepository
+		storageWatcher.StorageDiffRepository = mockDiffsRepository
+		storageWatcher.AddTransformers([]storage.TransformerInitializer{mockTransformer.FakeTransformerInitializer})
+	})
+
+	Describe("Execute", func() {
 		It("creates file for health check", func() {
-			mockDiffsRepository.GetNewDiffsErrors = []error{fakes.FakeError}
+			setGetDiffsErrors(storageWatcher.DiffStatus, mockDiffsRepository, []error{fakes.FakeError})
 
 			err := storageWatcher.Execute()
 
 			Expect(err).To(HaveOccurred())
+			Expect(err).To(MatchError(fakes.FakeError))
 			Expect(statusWriter.WriteCalled).To(BeTrue())
 		})
 
 		It("fetches diffs with results limit", func() {
-			mockDiffsRepository.GetNewDiffsErrors = []error{fakes.FakeError}
+			setGetDiffsErrors(storageWatcher.DiffStatus, mockDiffsRepository, []error{fakes.FakeError})
 
 			err := storageWatcher.Execute()
 
 			Expect(err).To(HaveOccurred())
-			Expect(mockDiffsRepository.GetNewDiffsPassedLimits).To(ConsistOf(watcher.ResultsLimit))
+			Expect(err).To(MatchError(fakes.FakeError))
+			assertGetDiffsLimits(storageWatcher.DiffStatus, mockDiffsRepository, watcher.ResultsLimit)
 		})
 
 		It("fetches diffs with min ID from subsequent queries when previous query returns max results", func() {
@@ -93,13 +129,14 @@ var _ = Describe("Storage Watcher", func() {
 				}
 				diffs = append(diffs, diff)
 			}
-			mockDiffsRepository.GetNewDiffsDiffs = diffs
-			mockDiffsRepository.GetNewDiffsErrors = []error{nil, fakes.FakeError}
+			setDiffsToReturn(storageWatcher.DiffStatus, mockDiffsRepository, diffs)
+			setGetDiffsErrors(storageWatcher.DiffStatus, mockDiffsRepository, []error{nil, fakes.FakeError})
 
 			err := storageWatcher.Execute()
 
 			Expect(err).To(HaveOccurred())
-			Expect(mockDiffsRepository.GetNewDiffsPassedMinIDs).To(ConsistOf(0, diffID))
+			Expect(err).To(MatchError(fakes.FakeError))
+			assertGetDiffsMinIDs(storageWatcher.DiffStatus, mockDiffsRepository, []int{0, diffID})
 		})
 
 		It("resets min ID to zero when previous query returns fewer than max results", func() {
@@ -115,24 +152,26 @@ var _ = Describe("Storage Watcher", func() {
 				}
 				diffs = append(diffs, diff)
 			}
-			mockDiffsRepository.GetNewDiffsDiffs = diffs
-			mockDiffsRepository.GetNewDiffsErrors = []error{nil, fakes.FakeError}
+			setDiffsToReturn(storageWatcher.DiffStatus, mockDiffsRepository, diffs)
+			setGetDiffsErrors(storageWatcher.DiffStatus, mockDiffsRepository, []error{nil, fakes.FakeError})
 
 			err := storageWatcher.Execute()
 
 			Expect(err).To(HaveOccurred())
-			Expect(mockDiffsRepository.GetNewDiffsPassedMinIDs).To(ConsistOf(0, 0))
+			Expect(err).To(MatchError(fakes.FakeError))
+			assertGetDiffsMinIDs(storageWatcher.DiffStatus, mockDiffsRepository, []int{0, 0})
 		})
 
-		It("marks diff as unwatched if no transformer is watching its address", func() {
+		It("marks diff as 'unwatched' if no transformer is watching its address", func() {
+			unwatchedAddress := test_data.FakeAddress()
 			unwatchedDiff := types.PersistedDiff{
 				RawDiff: types.RawDiff{
-					Address: test_data.FakeAddress(),
+					Address: unwatchedAddress,
 				},
 				ID: rand.Int63(),
 			}
-			mockDiffsRepository.GetNewDiffsDiffs = []types.PersistedDiff{unwatchedDiff}
-			mockDiffsRepository.GetNewDiffsErrors = []error{nil, fakes.FakeError}
+			setDiffsToReturn(storageWatcher.DiffStatus, mockDiffsRepository, []types.PersistedDiff{unwatchedDiff})
+			setGetDiffsErrors(storageWatcher.DiffStatus, mockDiffsRepository, []error{nil, fakes.FakeError})
 
 			err := storageWatcher.Execute()
 
@@ -141,18 +180,34 @@ var _ = Describe("Storage Watcher", func() {
 			Expect(mockDiffsRepository.MarkUnwatchedPassedID).To(Equal(unwatchedDiff.ID))
 		})
 
+		It("does not change a diff's status if there's no header for the given block number", func() {
+			diffWithoutHeader := types.PersistedDiff{
+				RawDiff: types.RawDiff{
+					Address:     contractAddress,
+					BlockHash:   test_data.FakeHash(),
+					BlockHeight: rand.Int(),
+				},
+				ID: rand.Int63(),
+			}
+			setDiffsToReturn(storageWatcher.DiffStatus, mockDiffsRepository, []types.PersistedDiff{diffWithoutHeader})
+			setGetDiffsErrors(storageWatcher.DiffStatus, mockDiffsRepository, []error{nil, fakes.FakeError})
+			mockHeaderRepository.GetHeaderByBlockNumberError = sql.ErrNoRows
+
+			err := storageWatcher.Execute()
+
+			Expect(err).To(HaveOccurred())
+			Expect(err).To(MatchError(sql.ErrNoRows))
+			Expect(mockDiffsRepository.MarkTransformedPassedID).NotTo(Equal(diffWithoutHeader.ID))
+		})
+
 		Describe("When the watcher is configured to skip old diffs", func() {
 			var diffs []types.PersistedDiff
 			var numberOfBlocksFromHeadOfChain = int64(500)
 
 			BeforeEach(func() {
-				storageWatcher = watcher.StorageWatcher{
-					HeaderRepository:          mockHeaderRepository,
-					StorageDiffRepository:     mockDiffsRepository,
-					AddressTransformers:       map[common.Address]storage.ITransformer{},
-					DiffBlocksFromHeadOfChain: numberOfBlocksFromHeadOfChain,
-					StatusWriter:              &statusWriter,
-				}
+				storageWatcher.AddressTransformers = map[common.Address]storage.ITransformer{}
+				storageWatcher.DiffBlocksFromHeadOfChain = numberOfBlocksFromHeadOfChain
+
 				diffID := rand.Int()
 				for i := 0; i < watcher.ResultsLimit; i++ {
 					diffID = diffID + i
@@ -171,8 +226,8 @@ var _ = Describe("Storage Watcher", func() {
 				mockHeaderRepository.MostRecentHeaderBlockNumber = headerBlockNumber
 
 				mockDiffsRepository.GetFirstDiffIDToReturn = diffs[0].ID
-				mockDiffsRepository.GetNewDiffsDiffs = diffs
-				mockDiffsRepository.GetNewDiffsErrors = []error{nil, fakes.FakeError}
+				setDiffsToReturn(storageWatcher.DiffStatus, mockDiffsRepository, diffs)
+				setGetDiffsErrors(storageWatcher.DiffStatus, mockDiffsRepository, []error{nil, fakes.FakeError})
 
 				expectedFirstMinDiffID := int(diffs[0].ID - 1)
 				expectedSecondMinDiffID := int(diffs[len(diffs)-1].ID)
@@ -182,7 +237,7 @@ var _ = Describe("Storage Watcher", func() {
 				Expect(err).To(HaveOccurred())
 				Expect(err).To(MatchError(fakes.FakeError))
 				Expect(mockDiffsRepository.GetFirstDiffBlockHeightPassed).To(Equal(headerBlockNumber - numberOfBlocksFromHeadOfChain))
-				Expect(mockDiffsRepository.GetNewDiffsPassedMinIDs).To(ConsistOf(expectedFirstMinDiffID, expectedSecondMinDiffID))
+				assertGetDiffsMinIDs(storageWatcher.DiffStatus, mockDiffsRepository, []int{expectedFirstMinDiffID, expectedSecondMinDiffID})
 			})
 
 			It("resets min ID back to new min diff when previous query returns fewer than max results", func() {
@@ -203,8 +258,8 @@ var _ = Describe("Storage Watcher", func() {
 				mockHeaderRepository.MostRecentHeaderBlockNumber = headerBlockNumber
 
 				mockDiffsRepository.GetFirstDiffIDToReturn = diffs[0].ID
-				mockDiffsRepository.GetNewDiffsDiffs = diffs
-				mockDiffsRepository.GetNewDiffsErrors = []error{nil, fakes.FakeError}
+				setDiffsToReturn(storageWatcher.DiffStatus, mockDiffsRepository, diffs)
+				setGetDiffsErrors(storageWatcher.DiffStatus, mockDiffsRepository, []error{nil, fakes.FakeError})
 
 				expectedFirstMinDiffID := int(diffs[0].ID - 1)
 
@@ -213,13 +268,13 @@ var _ = Describe("Storage Watcher", func() {
 				Expect(err).To(HaveOccurred())
 				Expect(err).To(MatchError(fakes.FakeError))
 				Expect(mockDiffsRepository.GetFirstDiffBlockHeightPassed).To(Equal(headerBlockNumber - numberOfBlocksFromHeadOfChain))
-				Expect(mockDiffsRepository.GetNewDiffsPassedMinIDs).To(ConsistOf(expectedFirstMinDiffID, expectedFirstMinDiffID))
+				assertGetDiffsMinIDs(storageWatcher.DiffStatus, mockDiffsRepository, []int{expectedFirstMinDiffID, expectedFirstMinDiffID})
 			})
 
 			It("sets minID to 0 if there are no headers with the given block height", func() {
 				mockHeaderRepository.MostRecentHeaderBlockNumberErr = sql.ErrNoRows
-				mockDiffsRepository.GetNewDiffsDiffs = diffs
-				mockDiffsRepository.GetNewDiffsErrors = []error{nil, fakes.FakeError}
+				setDiffsToReturn(storageWatcher.DiffStatus, mockDiffsRepository, diffs)
+				setGetDiffsErrors(storageWatcher.DiffStatus, mockDiffsRepository, []error{nil, fakes.FakeError})
 				err := storageWatcher.Execute()
 
 				Expect(err).To(HaveOccurred())
@@ -227,13 +282,13 @@ var _ = Describe("Storage Watcher", func() {
 
 				expectedFirstMinDiffID := 0
 				expectedSecondMinDiffID := int(diffs[len(diffs)-1].ID)
-				Expect(mockDiffsRepository.GetNewDiffsPassedMinIDs).To(ConsistOf(expectedFirstMinDiffID, expectedSecondMinDiffID))
+				assertGetDiffsMinIDs(storageWatcher.DiffStatus, mockDiffsRepository, []int{expectedFirstMinDiffID, expectedSecondMinDiffID})
 			})
 
 			It("sets minID to 0 if there are no diffs with given block range", func() {
 				mockDiffsRepository.GetFirstDiffIDErr = sql.ErrNoRows
-				mockDiffsRepository.GetNewDiffsDiffs = diffs
-				mockDiffsRepository.GetNewDiffsErrors = []error{nil, fakes.FakeError}
+				setDiffsToReturn(storageWatcher.DiffStatus, mockDiffsRepository, diffs)
+				setGetDiffsErrors(storageWatcher.DiffStatus, mockDiffsRepository, []error{nil, fakes.FakeError})
 				err := storageWatcher.Execute()
 
 				Expect(err).To(HaveOccurred())
@@ -241,154 +296,158 @@ var _ = Describe("Storage Watcher", func() {
 
 				expectedFirstMinDiffID := 0
 				expectedSecondMinDiffID := int(diffs[len(diffs)-1].ID)
-				Expect(mockDiffsRepository.GetNewDiffsPassedMinIDs).To(ConsistOf(expectedFirstMinDiffID, expectedSecondMinDiffID))
+				assertGetDiffsMinIDs(storageWatcher.DiffStatus, mockDiffsRepository, []int{expectedFirstMinDiffID, expectedSecondMinDiffID})
 			})
 		})
 
-		Describe("when diff's address is watched", func() {
+		Describe("When a header with a non-matching hash is found", func() {
 			var (
-				contractAddress common.Address
-				mockTransformer *mocks.MockStorageTransformer
+				blockNumber       int
+				fakePersistedDiff types.PersistedDiff
 			)
 
 			BeforeEach(func() {
-				contractAddress = test_data.FakeAddress()
-				mockTransformer = &mocks.MockStorageTransformer{Address: contractAddress}
-				storageWatcher.AddTransformers([]storage.TransformerInitializer{mockTransformer.FakeTransformerInitializer})
+				blockNumber = rand.Int()
+				fakeRawDiff := types.RawDiff{
+					Address:      contractAddress,
+					BlockHash:    test_data.FakeHash(),
+					BlockHeight:  blockNumber,
+					StorageKey:   test_data.FakeHash(),
+					StorageValue: test_data.FakeHash(),
+				}
+				mockHeaderRepository.GetHeaderByBlockNumberReturnID = int64(blockNumber)
+				mockHeaderRepository.GetHeaderByBlockNumberReturnHash = test_data.FakeHash().Hex()
+
+				fakePersistedDiff = types.PersistedDiff{
+					RawDiff: fakeRawDiff,
+					ID:      rand.Int63(),
+				}
+				setDiffsToReturn(storageWatcher.DiffStatus, mockDiffsRepository, []types.PersistedDiff{fakePersistedDiff})
 			})
 
-			It("does not mark diff checked if no matching header", func() {
-				diffWithoutHeader := types.PersistedDiff{
-					RawDiff: types.RawDiff{
-						Address:     contractAddress,
-						BlockHash:   test_data.FakeHash(),
-						BlockHeight: rand.Int(),
-					},
-					ID: rand.Int63(),
-				}
-				mockDiffsRepository.GetNewDiffsDiffs = []types.PersistedDiff{diffWithoutHeader}
-				mockDiffsRepository.GetNewDiffsErrors = []error{nil, fakes.FakeError}
-				mockHeaderRepository.GetHeaderByBlockNumberError = errors.New("no matching header")
+			It("does not change a diff's status if getting max known block height fails", func() {
+				maxHeaderErr := errors.New("getting max header failed")
+				mockHeaderRepository.MostRecentHeaderBlockNumberErr = maxHeaderErr
+				setGetDiffsErrors(storageWatcher.DiffStatus, mockDiffsRepository, []error{nil})
+
+				err := storageWatcher.Execute()
+
+				Expect(err).To(HaveOccurred())
+				Expect(err).To(MatchError(maxHeaderErr))
+				Expect(mockDiffsRepository.MarkTransformedPassedID).NotTo(Equal(fakePersistedDiff.ID))
+			})
+
+			It("marks diff 'noncanonical' if block height less than max known block height minus reorg window", func() {
+				mockHeaderRepository.MostRecentHeaderBlockNumber = int64(blockNumber + watcher.ReorgWindow + 1)
+				setGetDiffsErrors(storageWatcher.DiffStatus, mockDiffsRepository, []error{nil, fakes.FakeError})
 
 				err := storageWatcher.Execute()
 
 				Expect(err).To(HaveOccurred())
 				Expect(err).To(MatchError(fakes.FakeError))
-				Expect(mockDiffsRepository.MarkCheckedPassedID).NotTo(Equal(diffWithoutHeader.ID))
+				Expect(mockDiffsRepository.MarkNoncanonicalPassedID).To(Equal(fakePersistedDiff.ID))
 			})
 
-			Describe("when non-matching header found", func() {
-				var (
-					blockNumber       int
-					fakePersistedDiff types.PersistedDiff
-				)
+			It("does not mark diff as 'noncanonical' if block height is within reorg window", func() {
+				mockHeaderRepository.MostRecentHeaderBlockNumber = int64(blockNumber + watcher.ReorgWindow)
+				setGetDiffsErrors(storageWatcher.DiffStatus, mockDiffsRepository, []error{nil, fakes.FakeError})
 
-				BeforeEach(func() {
-					blockNumber = rand.Int()
-					fakeRawDiff := types.RawDiff{
-						Address:      contractAddress,
-						BlockHash:    test_data.FakeHash(),
-						BlockHeight:  blockNumber,
-						StorageKey:   test_data.FakeHash(),
-						StorageValue: test_data.FakeHash(),
-					}
-					mockHeaderRepository.GetHeaderByBlockNumberReturnID = int64(blockNumber)
-					mockHeaderRepository.GetHeaderByBlockNumberReturnHash = test_data.FakeHash().Hex()
+				err := storageWatcher.Execute()
 
-					fakePersistedDiff = types.PersistedDiff{
-						RawDiff: fakeRawDiff,
-						ID:      rand.Int63(),
-					}
-					mockDiffsRepository.GetNewDiffsDiffs = []types.PersistedDiff{fakePersistedDiff}
-				})
+				Expect(err).To(HaveOccurred())
+				Expect(err).To(MatchError(fakes.FakeError))
+				Expect(mockDiffsRepository.MarkTransformedPassedID).NotTo(Equal(fakePersistedDiff.ID))
+			})
+		})
 
-				It("does not mark diff checked if getting max known block height fails", func() {
-					mockHeaderRepository.MostRecentHeaderBlockNumberErr = errors.New("getting max header failed")
-					mockDiffsRepository.GetNewDiffsErrors = []error{nil, fakes.FakeError}
+		Describe("When a header with a matching hash exists", func() {
+			var fakePersistedDiff types.PersistedDiff
 
-					err := storageWatcher.Execute()
+			BeforeEach(func() {
+				fakeBlockHash := test_data.FakeHash()
+				fakeRawDiff := types.RawDiff{
+					Address:   contractAddress,
+					BlockHash: fakeBlockHash,
+				}
 
-					Expect(err).To(HaveOccurred())
-					Expect(err).To(MatchError(fakes.FakeError))
-					Expect(mockDiffsRepository.MarkCheckedPassedID).NotTo(Equal(fakePersistedDiff.ID))
-				})
+				mockHeaderRepository.GetHeaderByBlockNumberReturnID = rand.Int63()
+				mockHeaderRepository.GetHeaderByBlockNumberReturnHash = fakeBlockHash.Hex()
 
-				It("marks diff noncanonical if block height less than max known block height minus reorg window", func() {
-					mockHeaderRepository.MostRecentHeaderBlockNumber = int64(blockNumber + watcher.ReorgWindow + 1)
-					mockDiffsRepository.GetNewDiffsErrors = []error{nil, fakes.FakeError}
-
-					err := storageWatcher.Execute()
-
-					Expect(err).To(HaveOccurred())
-					Expect(err).To(MatchError(fakes.FakeError))
-					Expect(mockDiffsRepository.MarkNoncanonicalPassedID).To(Equal(fakePersistedDiff.ID))
-				})
-
-				It("does not mark diff checked if block height is within reorg window", func() {
-					mockHeaderRepository.MostRecentHeaderBlockNumber = int64(blockNumber + watcher.ReorgWindow)
-					mockDiffsRepository.GetNewDiffsErrors = []error{nil, fakes.FakeError}
-
-					err := storageWatcher.Execute()
-
-					Expect(err).To(HaveOccurred())
-					Expect(err).To(MatchError(fakes.FakeError))
-					Expect(mockDiffsRepository.MarkCheckedPassedID).NotTo(Equal(fakePersistedDiff.ID))
-				})
+				fakePersistedDiff = types.PersistedDiff{
+					RawDiff: fakeRawDiff,
+					ID:      rand.Int63(),
+				}
+				setDiffsToReturn(storageWatcher.DiffStatus, mockDiffsRepository, []types.PersistedDiff{fakePersistedDiff})
 			})
 
-			Describe("when matching header exists", func() {
-				var fakePersistedDiff types.PersistedDiff
+			It("does not change diff's status if transformer execution fails", func() {
+				executeErr := errors.New("execute failed")
+				mockTransformer.ExecuteErr = executeErr
+				setGetDiffsErrors(storageWatcher.DiffStatus, mockDiffsRepository, []error{nil})
 
-				BeforeEach(func() {
-					fakeBlockHash := test_data.FakeHash()
-					fakeRawDiff := types.RawDiff{
-						Address:   contractAddress,
-						BlockHash: fakeBlockHash,
-					}
+				err := storageWatcher.Execute()
 
-					mockHeaderRepository.GetHeaderByBlockNumberReturnID = rand.Int63()
-					mockHeaderRepository.GetHeaderByBlockNumberReturnHash = fakeBlockHash.Hex()
+				Expect(err).To(HaveOccurred())
+				Expect(err).To(MatchError(executeErr))
+				Expect(mockDiffsRepository.MarkTransformedPassedID).NotTo(Equal(fakePersistedDiff.ID))
+			})
 
-					fakePersistedDiff = types.PersistedDiff{
-						RawDiff: fakeRawDiff,
-						ID:      rand.Int63(),
-					}
-					mockDiffsRepository.GetNewDiffsDiffs = []types.PersistedDiff{fakePersistedDiff}
-				})
+			It("marks diff as 'unrecognized' when transforming the diff returns a ErrKeyNotFound error", func() {
+				mockTransformer.ExecuteErr = types.ErrKeyNotFound
+				setGetDiffsErrors(storageWatcher.DiffStatus, mockDiffsRepository, []error{nil, types.ErrKeyNotFound})
 
-				It("does not mark diff checked if transformer execution fails", func() {
-					mockTransformer.ExecuteErr = errors.New("execute failed")
-					mockDiffsRepository.GetNewDiffsErrors = []error{nil, fakes.FakeError}
+				err := storageWatcher.Execute()
 
-					err := storageWatcher.Execute()
+				Expect(err).To(HaveOccurred())
+				Expect(err).To(MatchError(types.ErrKeyNotFound))
+				Expect(mockDiffsRepository.MarkUnrecognizedPassedID).To(Equal(fakePersistedDiff.ID))
+			})
 
-					Expect(err).To(HaveOccurred())
-					Expect(err).To(MatchError(fakes.FakeError))
-					Expect(mockDiffsRepository.MarkCheckedPassedID).NotTo(Equal(fakePersistedDiff.ID))
-				})
+			It("marks diff transformed if transformer execution doesn't fail", func() {
+				setDiffsToReturn(storageWatcher.DiffStatus, mockDiffsRepository, []types.PersistedDiff{fakePersistedDiff})
+				setGetDiffsErrors(storageWatcher.DiffStatus, mockDiffsRepository, []error{nil, fakes.FakeError})
 
-				It("marks diff as 'unrecognized' when transforming the diff returns a ErrKeyNotFound error", func() {
-					mockTransformer.ExecuteErr = types.ErrKeyNotFound
-					mockDiffsRepository.GetNewDiffsErrors = []error{nil, types.ErrKeyNotFound}
+				err := storageWatcher.Execute()
 
-					err := storageWatcher.Execute()
-
-					Expect(err).To(HaveOccurred())
-					Expect(err).To(MatchError(types.ErrKeyNotFound))
-					Expect(mockDiffsRepository.MarkUnrecognizedPassedID).To(Equal(fakePersistedDiff.ID))
-				})
-
-				It("marks diff checked if transformer execution doesn't fail", func() {
-					mockDiffsRepository.GetNewDiffsDiffs = []types.PersistedDiff{fakePersistedDiff}
-					mockDiffsRepository.GetNewDiffsErrors = []error{nil, fakes.FakeError}
-
-					err := storageWatcher.Execute()
-
-					Expect(err).To(HaveOccurred())
-					Expect(err).To(MatchError(fakes.FakeError))
-					Expect(mockDiffsRepository.MarkCheckedPassedID).To(Equal(fakePersistedDiff.ID))
-				})
+				Expect(err).To(HaveOccurred())
+				Expect(err).To(MatchError(fakes.FakeError))
+				Expect(mockDiffsRepository.MarkTransformedPassedID).To(Equal(fakePersistedDiff.ID))
 			})
 		})
 	})
-})
+}
+
+func setGetDiffsErrors(diffStatus watcher.DiffStatusToWatch, mockDiffsRepo *mocks.MockStorageDiffRepository, diffErrors []error) {
+	switch diffStatus {
+	case watcher.New:
+		mockDiffsRepo.GetNewDiffsErrors = diffErrors
+	case watcher.Unrecognized:
+		mockDiffsRepo.GetUnrecognizedDiffsErrors = diffErrors
+	}
+}
+func setDiffsToReturn(diffStatus watcher.DiffStatusToWatch, mockDiffsRepo *mocks.MockStorageDiffRepository, diffs []types.PersistedDiff) {
+	switch diffStatus {
+	case watcher.New:
+		mockDiffsRepo.GetNewDiffsToReturn = diffs
+	case watcher.Unrecognized:
+		mockDiffsRepo.GetUnrecognizedDiffsToReturn = diffs
+	}
+}
+
+func assertGetDiffsLimits(diffStatus watcher.DiffStatusToWatch, mockDiffRepo *mocks.MockStorageDiffRepository, watcherLimit int) {
+	switch diffStatus {
+	case watcher.New:
+		Expect(mockDiffRepo.GetNewDiffsPassedLimits).To(ConsistOf(watcherLimit))
+	case watcher.Unrecognized:
+		Expect(mockDiffRepo.GetUnrecognizedDiffsPassedLimits).To(ConsistOf(watcherLimit))
+	}
+}
+
+func assertGetDiffsMinIDs(diffStatus watcher.DiffStatusToWatch, mockDiffRepo *mocks.MockStorageDiffRepository, passedMinIDs []int) {
+	switch diffStatus {
+	case watcher.New:
+		Expect(mockDiffRepo.GetNewDiffsPassedMinIDs).To(ConsistOf(passedMinIDs))
+	case watcher.Unrecognized:
+		Expect(mockDiffRepo.GetUnrecognizedDiffsPassedMinIDs).To(ConsistOf(passedMinIDs))
+	}
+}

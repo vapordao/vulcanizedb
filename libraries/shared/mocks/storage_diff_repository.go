@@ -24,11 +24,15 @@ type MockStorageDiffRepository struct {
 	CreateBackFilledStorageValuePassedRawDiffs []types.RawDiff
 	CreateBackFilledStorageValueReturnError    error
 	CreatePassedRawDiffs                       []types.RawDiff
-	GetNewDiffsDiffs                           []types.PersistedDiff
+	GetNewDiffsToReturn                        []types.PersistedDiff
 	GetNewDiffsErrors                          []error
 	GetNewDiffsPassedMinIDs                    []int
 	GetNewDiffsPassedLimits                    []int
-	MarkCheckedPassedID                        int64
+	GetUnrecognizedDiffsToReturn               []types.PersistedDiff
+	GetUnrecognizedDiffsErrors                 []error
+	GetUnrecognizedDiffsPassedMinIDs           []int
+	GetUnrecognizedDiffsPassedLimits           []int
+	MarkTransformedPassedID                    int64
 	MarkUnrecognizedPassedID                   int64
 	MarkNoncanonicalPassedID                   int64
 	MarkUnwatchedPassedID                      int64
@@ -54,11 +58,21 @@ func (repository *MockStorageDiffRepository) GetNewDiffs(minID, limit int) ([]ty
 	if len(repository.GetNewDiffsErrors) > 1 {
 		repository.GetNewDiffsErrors = repository.GetNewDiffsErrors[1:]
 	}
-	return repository.GetNewDiffsDiffs, err
+	return repository.GetNewDiffsToReturn, err
+}
+
+func (repository *MockStorageDiffRepository) GetUnrecognizedDiffs(minID, limit int) ([]types.PersistedDiff, error) {
+	repository.GetUnrecognizedDiffsPassedMinIDs = append(repository.GetUnrecognizedDiffsPassedMinIDs, minID)
+	repository.GetUnrecognizedDiffsPassedLimits = append(repository.GetUnrecognizedDiffsPassedLimits, limit)
+	err := repository.GetUnrecognizedDiffsErrors[0]
+	if len(repository.GetUnrecognizedDiffsErrors) > 1 {
+		repository.GetUnrecognizedDiffsErrors = repository.GetUnrecognizedDiffsErrors[1:]
+	}
+	return repository.GetUnrecognizedDiffsToReturn, err
 }
 
 func (repository *MockStorageDiffRepository) MarkTransformed(id int64) error {
-	repository.MarkCheckedPassedID = id
+	repository.MarkTransformedPassedID = id
 	return nil
 }
 
