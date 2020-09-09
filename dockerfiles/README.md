@@ -36,10 +36,15 @@ From project root directory:
 docker build -f dockerfiles/header_sync/Dockerfile . -t header_sync:latest
 ```
 
+You can also use the `dockerbuild` make task for any image in dockerfiles with `make dockerbuild IMAGE=header_sync`
+
+
 ### Run
 ```
 docker run -e DATABASE_USER=user -e DATABASE_PASSWORD=password -e DATABASE_HOSTNAME=host -e DATABASE_PORT=port -e DATABASE_NAME=name -e STARTING_BLOCK_NUMBER=0 -e CLIENT_IPCPATH=path -it header_sync:latest
 ```
+
+`header_sync` had a make task to run it `make header_sync CLIENT_IPCPATH=path NAME=database_name`. It's meant for development, not production. 
 
 ## resetHeaderCheckCount
 Dockerfile for resetting the `headers.check_count` to zero in the database for the given header, so that the execute command
