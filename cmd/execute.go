@@ -26,6 +26,7 @@ import (
 	"github.com/makerdao/vulcanizedb/libraries/shared/logs"
 	"github.com/makerdao/vulcanizedb/libraries/shared/transformer"
 	"github.com/makerdao/vulcanizedb/libraries/shared/watcher"
+	"github.com/makerdao/vulcanizedb/pkg/datastore/postgres/repositories"
 	"github.com/makerdao/vulcanizedb/pkg/fs"
 	"github.com/makerdao/vulcanizedb/utils"
 	"github.com/sirupsen/logrus"
@@ -96,7 +97,7 @@ func executeTransformers() {
 	// Use WaitGroup to wait on both goroutines
 	var wg sync.WaitGroup
 	if len(ethEventInitializers) > 0 {
-		extractor := logs.NewLogExtractor(&db, blockChain)
+		extractor := logs.NewLogExtractor(&db, blockChain, repositories.NewCheckedHeadersRepository(&db))
 		delegator := logs.NewLogDelegator(&db)
 		eventHealthCheckMessage := []byte("event watcher starting\n")
 		statusWriter := fs.NewStatusWriter(healthCheckFile, eventHealthCheckMessage)

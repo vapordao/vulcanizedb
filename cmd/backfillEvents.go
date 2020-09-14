@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/makerdao/vulcanizedb/libraries/shared/logs"
+	"github.com/makerdao/vulcanizedb/pkg/datastore/postgres/repositories"
 	"github.com/makerdao/vulcanizedb/utils"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
@@ -50,7 +51,7 @@ func backFillEvents() error {
 	blockChain := getBlockChain()
 	db := utils.LoadPostgres(databaseConfig, blockChain.Node())
 
-	extractor := logs.NewLogExtractor(&db, blockChain)
+	extractor := logs.NewLogExtractor(&db, blockChain, repositories.NewCheckedHeadersRepository(&db))
 
 	for _, initializer := range ethEventInitializers {
 		transformer := initializer(&db)
