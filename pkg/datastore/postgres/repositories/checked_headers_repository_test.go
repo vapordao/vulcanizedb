@@ -17,6 +17,7 @@
 package repositories_test
 
 import (
+	"fmt"
 	"math/rand"
 
 	"github.com/makerdao/vulcanizedb/pkg/core"
@@ -30,13 +31,36 @@ import (
 
 var _ = Describe("Checked Headers repository", func() {
 	var (
-		db   = test_config.NewTestDB(test_config.NewTestNode())
-		repo datastore.CheckedHeadersRepository
+		db               = test_config.NewTestDB(test_config.NewTestNode())
+		repo             datastore.CheckedHeadersRepository
+		pluginSchemaName = "plugin"
 	)
 
 	BeforeEach(func() {
 		test_config.CleanTestDB(db)
-		repo = repositories.NewCheckedHeadersRepository(db)
+		createSchema := `CREATE SCHEMA IF NOT EXISTS %s`
+		_, schemaError := db.Exec(fmt.Sprintf(createSchema, pluginSchemaName))
+		if schemaError != nil {
+			Fail(fmt.Errorf("Could not create schema %s, err %w", pluginSchemaName, schemaError).Error())
+		}
+
+		createTable := `CREATE TABLE %s.checked_headers (
+check_count INTEGER  NOT NULL DEFAULT 0,
+header_id INTEGER NOT NULL REFERENCES public.headers(id) ON DELETE CASCADE
+);`
+		_, tableError := db.Exec(fmt.Sprintf(createTable, pluginSchemaName))
+		if tableError != nil {
+			Fail(fmt.Errorf("Could not create table %s, err %w", pluginSchemaName, tableError).Error())
+		}
+
+		repo = repositories.NewCheckedHeadersRepository(db, pluginSchemaName)
+	})
+
+	AfterEach(func() {
+		_, err := db.Exec(fmt.Sprintf("DROP SCHEMA IF EXISTS %s CASCADE;", pluginSchemaName))
+		if err != nil {
+			Fail(fmt.Errorf("Could not drop schema %s, err %w", pluginSchemaName, err).Error())
+		}
 	})
 
 	Describe("MarkHeaderChecked", func() {
@@ -226,7 +250,7 @@ var _ = Describe("Checked Headers repository", func() {
 			It("only returns headers associated with any node", func() {
 				dbTwo := test_config.NewTestDB(core.Node{ID: "second"})
 				headerRepositoryTwo := repositories.NewHeaderRepository(dbTwo)
-				repoTwo := repositories.NewCheckedHeadersRepository(dbTwo)
+				repoTwo := repositories.NewCheckedHeadersRepository(dbTwo, pluginSchemaName)
 				for _, n := range blockNumbers {
 					_, err = headerRepositoryTwo.CreateOrUpdateHeader(fakes.GetFakeHeader(n + 10))
 					Expect(err).NotTo(HaveOccurred())
@@ -321,7 +345,7 @@ var _ = Describe("Checked Headers repository", func() {
 			It("returns headers associated with any node", func() {
 				dbTwo := test_config.NewTestDB(core.Node{ID: "second"})
 				headerRepositoryTwo := repositories.NewHeaderRepository(dbTwo)
-				repoTwo := repositories.NewCheckedHeadersRepository(dbTwo)
+				repoTwo := repositories.NewCheckedHeadersRepository(dbTwo, pluginSchemaName)
 				for _, n := range blockNumbers {
 					_, err = headerRepositoryTwo.CreateOrUpdateHeader(fakes.GetFakeHeader(n + 10))
 					Expect(err).NotTo(HaveOccurred())

@@ -29,7 +29,7 @@ type CheckedHeadersRepository struct {
 	db *postgres.DB
 }
 
-func NewCheckedHeadersRepository(db *postgres.DB) CheckedHeadersRepository {
+func NewCheckedHeadersRepository(db *postgres.DB, schemaName string) CheckedHeadersRepository {
 	return CheckedHeadersRepository{db: db}
 }
 
