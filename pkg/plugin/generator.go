@@ -18,6 +18,7 @@ package plugin
 
 import (
 	"errors"
+
 	"github.com/makerdao/vulcanizedb/pkg/config"
 	"github.com/makerdao/vulcanizedb/pkg/plugin/builder"
 	"github.com/makerdao/vulcanizedb/pkg/plugin/manager"
@@ -27,6 +28,7 @@ import (
 // Generator is the top-level interface for creating transformer plugins
 type Generator interface {
 	GenerateExporterPlugin() error
+	SetMigrationManager(manager.MigrationManager)
 }
 
 type generator struct {
@@ -65,4 +67,9 @@ func (g *generator) GenerateExporterPlugin() error {
 
 	// Perform db migrations for the transformers
 	return g.MigrationManager.RunMigrations()
+}
+
+// Sets the Migration manager - typically used for testing
+func (g *generator) SetMigrationManager(mgr manager.MigrationManager) {
+	g.MigrationManager = mgr
 }

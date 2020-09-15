@@ -3,16 +3,17 @@ module github.com/makerdao/vulcanizedb
 go 1.12
 
 require (
+	github.com/ClickHouse/clickhouse-go v1.4.3 // indirect
 	github.com/dave/jennifer v1.3.0
 	github.com/ethereum/go-ethereum v1.9.8
 	github.com/hashicorp/golang-lru v0.5.4
 	github.com/hpcloud/tail v1.0.0
-	github.com/jmoiron/sqlx v0.0.0-20181024163419-82935fac6c1a
+	github.com/jmoiron/sqlx v1.2.0
 	github.com/lib/pq v1.0.0
 	github.com/mitchellh/go-homedir v1.1.0
 	github.com/onsi/ginkgo v1.10.1
 	github.com/onsi/gomega v1.10.0
-	github.com/pressly/goose v2.6.0+incompatible
+	github.com/pressly/goose v2.7.0-rc5+incompatible
 	github.com/sirupsen/logrus v1.2.0
 	github.com/spf13/cobra v0.0.3
 	github.com/spf13/viper v1.3.2

@@ -9,10 +9,7 @@ $(BIN)/ginkgo:
 	go get -u github.com/onsi/ginkgo/ginkgo
 
 ## Migration tool
-GOOSE = $(BIN)/goose
-$(BIN)/goose:
-	go get -u -d github.com/pressly/goose/cmd/goose
-	go build -tags='no_mysql no_sqlite' -o $(BIN)/goose github.com/pressly/goose/cmd/goose
+GOOSE = go run -tags='no_mysql no_sqlite3 no_mssql no_redshift' github.com/pressly/goose/cmd/goose
 
 ## Source linter
 LINT = $(BIN)/golint
@@ -25,9 +22,8 @@ $(BIN)/gometalinter.v2:
 	go get -u gopkg.in/alecthomas/gometalinter.v2
 	$(METALINT) --install
 
-
 .PHONY: installtools
-installtools: | $(LINT) $(GOOSE) $(GINKGO)
+installtools: | $(LINT) $(GINKGO)
 	echo "Installing tools"
 
 .PHONY: metalint
@@ -100,30 +96,30 @@ checkmigname:
 # Migration operations
 ## Rollback the last migration
 .PHONY: rollback
-rollback: $(GOOSE) checkdbvars
+rollback: checkdbvars
 	$(GOOSE) -dir db/migrations postgres "$(CONNECT_STRING)" down
-	pg_dump -O -s $(CONNECT_STRING) > db/schema.sql
+	pg_dump -n 'public' -O -s $(CONNECT_STRING) > db/schema.sql
 
 
 ## Rollbackt to a select migration (id/timestamp)
 .PHONY: rollback_to
-rollback_to: $(GOOSE) checkmigration checkdbvars
+rollback_to: checkmigration checkdbvars
 	$(GOOSE) -dir db/migrations postgres "$(CONNECT_STRING)" down-to "$(MIGRATION)"
 
 ## Apply all migrations not already run
 .PHONY: migrate
-migrate: $(GOOSE) checkdbvars
+migrate: checkdbvars
 	$(GOOSE) -dir db/migrations postgres "$(CONNECT_STRING)" up
-	pg_dump -O -s $(CONNECT_STRING) > db/schema.sql
+	pg_dump -n 'public' -O -s $(CONNECT_STRING) > db/schema.sql
 
 ## Create a new migration file
 .PHONY: new_migration
-new_migration: $(GOOSE) checkmigname
+new_migration: checkmigname
 	$(GOOSE) -dir db/migrations create $(NAME) sql
 
 ## Check which migrations are applied at the moment
 .PHONY: migration_status
-migration_status: $(GOOSE) checkdbvars
+migration_status: checkdbvars
 	$(GOOSE) -dir db/migrations postgres "$(CONNECT_STRING)" status
 
 # Convert timestamped migrations to versioned (to be run in CI);
@@ -138,25 +134,29 @@ import:
 	test -n "$(NAME)" # $$NAME
 	psql $(NAME) < db/schema.sql
 
-
 # Docker actions
-## Rinkeby docker environment
-RINKEBY_COMPOSE_FILE=dockerfiles/rinkeby/docker-compose.yml
+# Build any docker image in dockerfiles
+.PHONY: dockerbuild
+dockerbuild:
+	test -n "$(IMAGE)" # $$IMAGE
+	docker build -t $(IMAGE) -f dockerfiles/$(IMAGE)/Dockerfile .
 
-.PHONY: rinkeby_env_up
-rinkeby_env_up:
-	docker-compose -f $(RINKEBY_COMPOSE_FILE) up -d geth
-	docker-compose -f $(RINKEBY_COMPOSE_FILE) up --build migrations
-	docker-compose -f $(RINKEBY_COMPOSE_FILE) up -d --build vulcanizedb
-
-.PHONY: rinkeby_env_deploy
-rinkeby_env_deploy:
-	docker-compose -f $(RINKEBY_COMPOSE_FILE) up -d --build vulcanizedb
-
-.PHONY: dev_env_migrate
-rinkeby_env_migrate:
-	docker-compose -f $(RINKEBY_COMPOSE_FILE) up --build migrations
-
-.PHONY: rinkeby_env_down
-rinkeby_env_down:
-	docker-compose -f $(RINKEBY_COMPOSE_FILE) down
+.PHONY: header_sync
+header_sync: STARTING_BLOCK_NUMBER ?= 10000000
+header_sync: HOST ?= host.docker.internal
+header_sync: DATABASE_PASSWORD ?= postgres
+header_sync: IMAGE_WITH_TAG ?= header_sync:latest
+header_sync:
+	test -n "$(NAME)" # $$(NAME) - Database Name
+	test -n "$(CLIENT_IPCPATH)" # $$(CLIENT_IPCPATH)
+	docker run \
+		-it \
+		-p "5432:5432" \
+		-e "STARTING_BLOCK_NUMBER=$(STARTING_BLOCK_NUMBER)" \
+		-e "DATABASE_NAME=$(NAME)" \
+		-e "DATABASE_HOSTNAME=$(HOST)" \
+		-e "DATABASE_PORT=$(PORT)" \
+		-e "DATABASE_USER=$(USER)" \
+		-e "DATABASE_PASSWORD=$(DATABASE_PASSWORD)" \
+		-e "CLIENT_IPCPATH=$(CLIENT_IPCPATH)" \
+		$(IMAGE_WITH_TAG)
