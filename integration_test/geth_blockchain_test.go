@@ -25,18 +25,17 @@ import (
 	"github.com/makerdao/vulcanizedb/pkg/eth/client"
 	"github.com/makerdao/vulcanizedb/pkg/eth/converters"
 	"github.com/makerdao/vulcanizedb/pkg/eth/node"
-	"github.com/makerdao/vulcanizedb/test_config"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
 
 var _ = Describe("Reading from the Geth blockchain", func() {
-	var blockChain *eth.BlockChain
+	var blockChain core.BlockChain
 
 	BeforeEach(func() {
-		rawRpcClient, err := rpc.Dial(test_config.TestClient.IPCPath)
+		rawRpcClient, err := rpc.Dial(TestClient.IPCPath)
 		Expect(err).NotTo(HaveOccurred())
-		rpcClient := client.NewRpcClient(rawRpcClient, test_config.TestClient.IPCPath)
+		rpcClient := client.NewRpcClient(rawRpcClient, TestClient.IPCPath)
 		ethClient := ethclient.NewClient(rawRpcClient)
 		blockChainClient := client.NewEthClient(ethClient)
 		node := node.MakeNode(rpcClient)

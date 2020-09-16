@@ -24,15 +24,15 @@ import (
 	"github.com/makerdao/vulcanizedb/pkg/contract_watcher/repository"
 	"github.com/makerdao/vulcanizedb/pkg/core"
 	"github.com/makerdao/vulcanizedb/pkg/datastore"
-	"github.com/makerdao/vulcanizedb/pkg/datastore/postgres"
 	"github.com/makerdao/vulcanizedb/pkg/datastore/postgres/repositories"
+	"github.com/makerdao/vulcanizedb/test_config"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
 
 var _ = Describe("Repository", func() {
 	var (
-		db                 *postgres.DB
+		db                 = test_config.NewTestDB(test_config.NewTestNode())
 		contractHeaderRepo repository.HeaderRepository // contract_watcher header repository
 		coreHeaderRepo     datastore.HeaderRepository  // pkg/datastore header repository
 		eventIDs           = []string{
@@ -43,13 +43,14 @@ var _ = Describe("Repository", func() {
 	)
 
 	BeforeEach(func() {
-		db, _ = test_helpers.SetupDBandBC()
+		test_config.CleanTestDB(db)
 		contractHeaderRepo = repository.NewHeaderRepository(db)
 		coreHeaderRepo = repositories.NewHeaderRepository(db)
 	})
 
 	AfterEach(func() {
-		test_helpers.TearDown(db)
+		err := test_helpers.ResetCheckedHeadersTableSchema(db)
+		Expect(err).NotTo(HaveOccurred(), "Failed to reset checked headers table in teardown")
 	})
 
 	Describe("AddCheckColumn", func() {
