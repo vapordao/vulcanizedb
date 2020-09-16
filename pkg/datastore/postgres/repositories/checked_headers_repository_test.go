@@ -37,16 +37,8 @@ func selectCheckedHeaders(db *postgres.DB, schemaName string, headerID int64) (i
 	return checkedCount, fetchErr
 }
 
-var _ = Describe("Checked Headers repository", func() {
-	var (
-		db               = test_config.NewTestDB(test_config.NewTestNode())
-		repo             datastore.CheckedHeadersRepository
-		pluginSchemaName = "plugin"
-	)
-
-	BeforeEach(func() {
-		test_config.CleanTestDB(db)
-		prepareSchema := `
+func createPluginSchema(db *postgres.DB, schemaName string) error {
+	prepareSchema := `
 CREATE SCHEMA IF NOT EXISTS %[1]s;
 
 CREATE TABLE %[1]s.checked_headers (
@@ -56,19 +48,33 @@ CREATE TABLE %[1]s.checked_headers (
 	UNIQUE (header_id)
 );
 `
-		_, schemaError := db.Exec(fmt.Sprintf(prepareSchema, pluginSchemaName))
-		if schemaError != nil {
-			Fail(fmt.Errorf("Could not create schema %s, err %w", pluginSchemaName, schemaError).Error())
-		}
+	_, schemaError := db.Exec(fmt.Sprintf(prepareSchema, schemaName))
+	return schemaError
+}
+
+func clearPluginSchema(db *postgres.DB, schemaName string) error {
+	_, err := db.Exec(fmt.Sprintf("DROP SCHEMA IF EXISTS %s CASCADE;", schemaName))
+	return err
+}
+
+var _ = Describe("Checked Headers repository", func() {
+	var (
+		db               = test_config.NewTestDB(test_config.NewTestNode())
+		repo             datastore.CheckedHeadersRepository
+		pluginSchemaName = "plugin"
+	)
+
+	BeforeEach(func() {
+		test_config.CleanTestDB(db)
+		schemaErr := createPluginSchema(db, pluginSchemaName)
+		Expect(schemaErr).NotTo(HaveOccurred())
 
 		repo = repositories.NewCheckedHeadersRepository(db, pluginSchemaName)
 	})
 
 	AfterEach(func() {
-		_, err := db.Exec(fmt.Sprintf("DROP SCHEMA IF EXISTS %s CASCADE;", pluginSchemaName))
-		if err != nil {
-			Fail(fmt.Errorf("Could not drop schema %s, err %w", pluginSchemaName, err).Error())
-		}
+		err := clearPluginSchema(db, pluginSchemaName)
+		Expect(err).NotTo(HaveOccurred())
 	})
 
 	Describe("MarkHeaderChecked", func() {
@@ -104,44 +110,47 @@ CREATE TABLE %[1]s.checked_headers (
 
 	Describe("MarkSingleHeaderUnchecked", func() {
 		It("marks headers with matching block number as unchecked", func() {
-			blockNumberOne := rand.Int63()
-			blockNumberTwo := blockNumberOne + 1
-			blockNumberThree := blockNumberOne + 2
-			fakeHeaderOne := fakes.GetFakeHeader(blockNumberOne)
-			fakeHeaderTwo := fakes.GetFakeHeader(blockNumberTwo)
-			fakeHeaderThree := fakes.GetFakeHeader(blockNumberThree)
+			blockNumber := rand.Int63()
+			fakeHeader := fakes.GetFakeHeader(blockNumber)
 			headerRepository := repositories.NewHeaderRepository(db)
-			// insert three headers with incrementing block number
-			headerIdOne, insertHeaderOneErr := headerRepository.CreateOrUpdateHeader(fakeHeaderOne)
-			Expect(insertHeaderOneErr).NotTo(HaveOccurred())
-			headerIdTwo, insertHeaderTwoErr := headerRepository.CreateOrUpdateHeader(fakeHeaderTwo)
-			Expect(insertHeaderTwoErr).NotTo(HaveOccurred())
-			headerIdThree, insertHeaderThreeErr := headerRepository.CreateOrUpdateHeader(fakeHeaderThree)
-			Expect(insertHeaderThreeErr).NotTo(HaveOccurred())
-			// mark all headers checked
-			markHeaderOneCheckedErr := repo.MarkHeaderChecked(headerIdOne)
-			Expect(markHeaderOneCheckedErr).NotTo(HaveOccurred())
-			markHeaderTwoCheckedErr := repo.MarkHeaderChecked(headerIdTwo)
-			Expect(markHeaderTwoCheckedErr).NotTo(HaveOccurred())
-			markHeaderThreeCheckedErr := repo.MarkHeaderChecked(headerIdThree)
-			Expect(markHeaderThreeCheckedErr).NotTo(HaveOccurred())
+			headerID, insertHeaderErr := headerRepository.CreateOrUpdateHeader(fakeHeader)
+			Expect(insertHeaderErr).NotTo(HaveOccurred())
+			markHeaderCheckedErr := repo.MarkHeaderChecked(headerID)
+			Expect(markHeaderCheckedErr).NotTo(HaveOccurred())
 
-			// mark header from blockNumberTwo unchecked
-			err := repo.MarkSingleHeaderUnchecked(blockNumberTwo)
-
+			err := repo.MarkSingleHeaderUnchecked(blockNumber)
 			Expect(err).NotTo(HaveOccurred())
 
-			headerOneCheckCount, getHeaderOneErr := selectCheckedHeaders(db, pluginSchemaName, headerIdOne)
-			Expect(getHeaderOneErr).NotTo(HaveOccurred())
-			Expect(headerOneCheckCount).To(Equal(1))
+			headerCheckCount, getHeaderErr := selectCheckedHeaders(db, pluginSchemaName, headerID)
+			Expect(getHeaderErr).NotTo(HaveOccurred())
+			Expect(headerCheckCount).To(BeZero())
+		})
 
-			headerTwoCheckCount, getHeaderTwoErr := selectCheckedHeaders(db, pluginSchemaName, headerIdTwo)
-			Expect(getHeaderTwoErr).NotTo(HaveOccurred())
-			Expect(headerTwoCheckCount).To(BeZero())
+		It("leaves headers without a matching block number alone", func() {
+			checkedBlockNumber := rand.Int63()
+			uncheckedBlockNumber := checkedBlockNumber + 1
+			checkedHeader := fakes.GetFakeHeader(checkedBlockNumber)
+			uncheckedHeader := fakes.GetFakeHeader(uncheckedBlockNumber)
+			headerRepository := repositories.NewHeaderRepository(db)
+			checkedHeaderID, insertCheckedHeaderErr := headerRepository.CreateOrUpdateHeader(checkedHeader)
+			Expect(insertCheckedHeaderErr).NotTo(HaveOccurred())
+			uncheckedHeaderID, insertUncheckedHeaderErr := headerRepository.CreateOrUpdateHeader(uncheckedHeader)
+			Expect(insertUncheckedHeaderErr).NotTo(HaveOccurred())
 
-			headerThreeCheckCount, getHeaderThreeErr := selectCheckedHeaders(db, pluginSchemaName, headerIdThree)
-			Expect(getHeaderThreeErr).NotTo(HaveOccurred())
-			Expect(headerThreeCheckCount).To(Equal(1))
+			// mark both headers as checked
+			markCheckedHeaderErr := repo.MarkHeaderChecked(checkedHeaderID)
+			Expect(markCheckedHeaderErr).NotTo(HaveOccurred())
+			markUncheckedHeaderErr := repo.MarkHeaderChecked(uncheckedHeaderID)
+			Expect(markUncheckedHeaderErr).NotTo(HaveOccurred())
+
+			// re-mark unchecked header as unchecked
+			err := repo.MarkSingleHeaderUnchecked(uncheckedBlockNumber)
+			Expect(err).NotTo(HaveOccurred())
+
+			// Verify the other block was ignored
+			checkedHeaderCount, checkedHeaderErr := selectCheckedHeaders(db, pluginSchemaName, checkedHeaderID)
+			Expect(checkedHeaderErr).NotTo(HaveOccurred())
+			Expect(checkedHeaderCount).To(Equal(1))
 		})
 	})
 
