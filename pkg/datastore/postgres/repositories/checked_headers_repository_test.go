@@ -213,7 +213,7 @@ var _ = Describe("Checked Headers repository", func() {
 			})
 
 			Describe("when header has already been checked", func() {
-				It("includes header with block number > 15 back from latest with check count of 1", func() {
+				It("includes header with block number >= 15 back from latest with check count of 1", func() {
 					err := repo.MarkHeaderChecked(thirdHeaderID)
 					Expect(err).NotTo(HaveOccurred())
 
@@ -241,8 +241,10 @@ var _ = Describe("Checked Headers repository", func() {
 				It("includes header with block number > 45 back from latest with check count of 2", func() {
 					err := repo.MarkHeaderChecked(secondHeaderID)
 					Expect(err).NotTo(HaveOccurred())
+					secondMarkErr := repo.MarkHeaderChecked(secondHeaderID)
+					Expect(secondMarkErr).NotTo(HaveOccurred())
 
-					headers, err := repo.UncheckedHeaders(firstBlock, lastBlock, recheckCheckCount)
+					headers, err := repo.UncheckedHeaders(firstBlock, lastBlock, 3)
 					Expect(err).NotTo(HaveOccurred())
 
 					headerBlockNumbers := getBlockNumbers(headers)
@@ -336,11 +338,13 @@ var _ = Describe("Checked Headers repository", func() {
 					Expect(headerBlockNumbers).NotTo(ContainElement(excludedHeader.BlockNumber))
 				})
 
-				It("includes header with block number > 45 back from latest with check count of 1", func() {
+				It("includes header with block number > 45 back from latest with check count of 2", func() {
 					err := repo.MarkHeaderChecked(secondHeaderID)
 					Expect(err).NotTo(HaveOccurred())
+					secondCheckErr := repo.MarkHeaderChecked(secondHeaderID)
+					Expect(secondCheckErr).NotTo(HaveOccurred())
 
-					headers, err := repo.UncheckedHeaders(firstBlock, -1, recheckCheckCount)
+					headers, err := repo.UncheckedHeaders(firstBlock, -1, 3)
 					Expect(err).NotTo(HaveOccurred())
 
 					headerBlockNumbers := getBlockNumbers(headers)
