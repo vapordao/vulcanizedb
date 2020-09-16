@@ -18,13 +18,7 @@ package integration_test
 
 import (
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/ethclient"
-	"github.com/ethereum/go-ethereum/rpc"
 	"github.com/makerdao/vulcanizedb/pkg/core"
-	"github.com/makerdao/vulcanizedb/pkg/eth"
-	"github.com/makerdao/vulcanizedb/pkg/eth/client"
-	"github.com/makerdao/vulcanizedb/pkg/eth/converters"
-	"github.com/makerdao/vulcanizedb/pkg/eth/node"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
@@ -33,14 +27,7 @@ var _ = Describe("Reading from the Geth blockchain", func() {
 	var blockChain core.BlockChain
 
 	BeforeEach(func() {
-		rawRpcClient, err := rpc.Dial(TestClient.IPCPath)
-		Expect(err).NotTo(HaveOccurred())
-		rpcClient := client.NewRpcClient(rawRpcClient, TestClient.IPCPath)
-		ethClient := ethclient.NewClient(rawRpcClient)
-		blockChainClient := client.NewEthClient(ethClient)
-		node := node.MakeNode(rpcClient)
-		transactionConverter := converters.NewTransactionConverter(ethClient)
-		blockChain = eth.NewBlockChain(blockChainClient, rpcClient, node, transactionConverter)
+		blockChain = SetupBC()
 	})
 
 	It("retrieves the node info", func(done Done) {

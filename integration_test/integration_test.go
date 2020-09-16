@@ -7,7 +7,6 @@ import (
 	"github.com/ethereum/go-ethereum/rpc"
 	"github.com/makerdao/vulcanizedb/pkg/config"
 	"github.com/makerdao/vulcanizedb/pkg/core"
-	"github.com/makerdao/vulcanizedb/pkg/datastore/postgres"
 	"github.com/makerdao/vulcanizedb/pkg/eth"
 	"github.com/makerdao/vulcanizedb/pkg/eth/client"
 	"github.com/makerdao/vulcanizedb/pkg/eth/converters"
@@ -36,7 +35,7 @@ func init() {
 	}
 }
 
-func SetupDBandBC() (*postgres.DB, core.BlockChain) {
+func SetupBC() core.BlockChain {
 	con := TestClient
 	testIPC := con.IPCPath
 	rawRPCClient, err := rpc.Dial(testIPC)
@@ -48,12 +47,5 @@ func SetupDBandBC() (*postgres.DB, core.BlockChain) {
 	transactionConverter := converters.NewTransactionConverter(ethClient)
 	blockChain := eth.NewBlockChain(blockChainClient, rpcClient, madeNode, transactionConverter)
 
-	db, err := postgres.NewDB(config.Database{
-		Hostname: "localhost",
-		Name:     "vulcanize_testing",
-		Port:     5432,
-	}, blockChain.Node())
-	Expect(err).NotTo(HaveOccurred())
-
-	return db, blockChain
+	return blockChain
 }
