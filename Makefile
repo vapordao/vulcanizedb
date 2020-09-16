@@ -61,6 +61,7 @@ test: | $(GINKGO) $(LINT)
 
 .PHONY: integrationtest
 integrationtest: | $(GINKGO) $(LINT)
+	test -n "$(CLIENT_IPCPATH)" # $$(CLIENT_IPCPATH)
 	go vet ./...
 	go fmt ./...
 	dropdb --if-exists $(TEST_DB)
