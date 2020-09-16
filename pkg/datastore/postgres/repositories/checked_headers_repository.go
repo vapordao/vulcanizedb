@@ -65,12 +65,11 @@ func (repo CheckedHeadersRepository) MarkSingleHeaderUnchecked(blockNumber int64
 func (repo CheckedHeadersRepository) UncheckedHeaders(startingBlockNumber, endingBlockNumber, checkCount int64) ([]core.Header, error) {
 	var (
 		result                  []core.Header
-		query                   string
 		err                     error
 		recheckOffsetMultiplier = 15
 	)
 
-	query = fmt.Sprintf(`SELECT h.id, h.block_number, h.hash
+	joinQuery := fmt.Sprintf(`SELECT h.id, h.block_number, h.hash
 						FROM public.headers h
 						LEFT JOIN %s.checked_headers ch
 						ON ch.header_id = h.id`, repo.schemaName)
@@ -79,7 +78,7 @@ func (repo CheckedHeadersRepository) UncheckedHeaders(startingBlockNumber, endin
 		noEndingBlockQuery := fmt.Sprintf(`%s
 				 WHERE ((ch.check_count IS NULL OR ch.check_count < 1) AND h.block_number >= $1)
 				 OR ((ch.check_count IS NULL OR ch.check_count < $2)
-			           AND h.block_number <= ((SELECT MAX(block_number) FROM public.headers) - ($3 * ch.check_count * (ch.check_count + 1) / 2)))`, query)
+			           AND h.block_number <= ((SELECT MAX(block_number) FROM public.headers) - ($3 * ch.check_count * (ch.check_count + 1) / 2)))`, joinQuery)
 		err = repo.db.Select(&result, noEndingBlockQuery, startingBlockNumber, checkCount, recheckOffsetMultiplier)
 	} else {
 		endingBlockQuery := fmt.Sprintf(`%s
@@ -87,7 +86,7 @@ func (repo CheckedHeadersRepository) UncheckedHeaders(startingBlockNumber, endin
 		OR ((ch.check_count IS NULL OR ch.check_count < $3)
 			AND h.block_number >= $1
 			AND h.block_number <= $2
-			AND h.block_number <= ((SELECT MAX(block_number) FROM public.headers) - ($4 * (ch.check_count * (ch.check_count + 1) / 2))))`, query)
+			AND h.block_number <= ((SELECT MAX(block_number) FROM public.headers) - ($4 * (ch.check_count * (ch.check_count + 1) / 2))))`, joinQuery)
 		err = repo.db.Select(&result, endingBlockQuery, startingBlockNumber, endingBlockNumber, checkCount, recheckOffsetMultiplier)
 	}
 
