@@ -22,12 +22,20 @@ import (
 
 	"github.com/makerdao/vulcanizedb/pkg/core"
 	"github.com/makerdao/vulcanizedb/pkg/datastore"
+	"github.com/makerdao/vulcanizedb/pkg/datastore/postgres"
 	"github.com/makerdao/vulcanizedb/pkg/datastore/postgres/repositories"
 	"github.com/makerdao/vulcanizedb/pkg/fakes"
 	"github.com/makerdao/vulcanizedb/test_config"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
+
+func selectCheckedHeaders(db *postgres.DB, schemaName string, headerID int64) (int, error) {
+	var checkedCount int
+	queryString := fmt.Sprintf(`SELECT check_count FROM %s.checked_headers WHERE header_id = $1`, schemaName)
+	fetchErr := db.Get(&checkedCount, queryString, headerID)
+	return checkedCount, fetchErr
+}
 
 var _ = Describe("Checked Headers repository", func() {
 	var (
@@ -38,19 +46,19 @@ var _ = Describe("Checked Headers repository", func() {
 
 	BeforeEach(func() {
 		test_config.CleanTestDB(db)
-		createSchema := `CREATE SCHEMA IF NOT EXISTS %s`
-		_, schemaError := db.Exec(fmt.Sprintf(createSchema, pluginSchemaName))
+		prepareSchema := `
+CREATE SCHEMA IF NOT EXISTS %[1]s;
+
+CREATE TABLE %[1]s.checked_headers (
+	id SERIAL PRIMARY KEY,
+	check_count INTEGER  NOT NULL DEFAULT 0,
+	header_id INTEGER NOT NULL REFERENCES public.headers(id) ON DELETE CASCADE,
+	UNIQUE (header_id)
+);
+`
+		_, schemaError := db.Exec(fmt.Sprintf(prepareSchema, pluginSchemaName))
 		if schemaError != nil {
 			Fail(fmt.Errorf("Could not create schema %s, err %w", pluginSchemaName, schemaError).Error())
-		}
-
-		createTable := `CREATE TABLE %s.checked_headers (
-check_count INTEGER  NOT NULL DEFAULT 0,
-header_id INTEGER NOT NULL REFERENCES public.headers(id) ON DELETE CASCADE
-);`
-		_, tableError := db.Exec(fmt.Sprintf(createTable, pluginSchemaName))
-		if tableError != nil {
-			Fail(fmt.Errorf("Could not create table %s, err %w", pluginSchemaName, tableError).Error())
 		}
 
 		repo = repositories.NewCheckedHeadersRepository(db, pluginSchemaName)
@@ -72,8 +80,7 @@ header_id INTEGER NOT NULL REFERENCES public.headers(id) ON DELETE CASCADE
 			err := repo.MarkHeaderChecked(headerID)
 
 			Expect(err).NotTo(HaveOccurred())
-			var checkedCount int
-			fetchErr := db.Get(&checkedCount, `SELECT check_count FROM public.headers WHERE id = $1`, headerID)
+			checkedCount, fetchErr := selectCheckedHeaders(db, pluginSchemaName, headerID)
 			Expect(fetchErr).NotTo(HaveOccurred())
 			Expect(checkedCount).To(Equal(1))
 		})
@@ -89,8 +96,7 @@ header_id INTEGER NOT NULL REFERENCES public.headers(id) ON DELETE CASCADE
 			updateErr := repo.MarkHeaderChecked(headerID)
 			Expect(updateErr).NotTo(HaveOccurred())
 
-			var checkedCount int
-			fetchErr := db.Get(&checkedCount, `SELECT check_count FROM public.headers WHERE id = $1`, headerID)
+			checkedCount, fetchErr := selectCheckedHeaders(db, pluginSchemaName, headerID)
 			Expect(fetchErr).NotTo(HaveOccurred())
 			Expect(checkedCount).To(Equal(2))
 		})
@@ -124,14 +130,16 @@ header_id INTEGER NOT NULL REFERENCES public.headers(id) ON DELETE CASCADE
 			err := repo.MarkSingleHeaderUnchecked(blockNumberTwo)
 
 			Expect(err).NotTo(HaveOccurred())
-			var headerOneCheckCount, headerTwoCheckCount, headerThreeCheckCount int
-			getHeaderOneErr := db.Get(&headerOneCheckCount, `SELECT check_count FROM public.headers WHERE id = $1`, headerIdOne)
+
+			headerOneCheckCount, getHeaderOneErr := selectCheckedHeaders(db, pluginSchemaName, headerIdOne)
 			Expect(getHeaderOneErr).NotTo(HaveOccurred())
 			Expect(headerOneCheckCount).To(Equal(1))
-			getHeaderTwoErr := db.Get(&headerTwoCheckCount, `SELECT check_count FROM public.headers WHERE id = $1`, headerIdTwo)
+
+			headerTwoCheckCount, getHeaderTwoErr := selectCheckedHeaders(db, pluginSchemaName, headerIdTwo)
 			Expect(getHeaderTwoErr).NotTo(HaveOccurred())
 			Expect(headerTwoCheckCount).To(BeZero())
-			getHeaderThreeErr := db.Get(&headerThreeCheckCount, `SELECT check_count FROM public.headers WHERE id = $1`, headerIdThree)
+
+			headerThreeCheckCount, getHeaderThreeErr := selectCheckedHeaders(db, pluginSchemaName, headerIdThree)
 			Expect(getHeaderThreeErr).NotTo(HaveOccurred())
 			Expect(headerThreeCheckCount).To(Equal(1))
 		})
@@ -184,7 +192,7 @@ header_id INTEGER NOT NULL REFERENCES public.headers(id) ON DELETE CASCADE
 			})
 
 			It("excludes headers that have been checked more than the check count", func() {
-				_, err = db.Exec(`UPDATE public.headers SET check_count = 1 WHERE id = $1`, secondHeaderID)
+				err = repo.MarkHeaderChecked(secondHeaderID)
 				Expect(err).NotTo(HaveOccurred())
 
 				headers, err := repo.UncheckedHeaders(firstBlock, thirdBlock, uncheckedCheckCount)
@@ -197,7 +205,7 @@ header_id INTEGER NOT NULL REFERENCES public.headers(id) ON DELETE CASCADE
 
 			Describe("when header has already been checked", func() {
 				It("includes header with block number > 15 back from latest with check count of 1", func() {
-					_, err = db.Exec(`UPDATE public.headers SET check_count = 1 WHERE id = $1`, thirdHeaderID)
+					err := repo.MarkHeaderChecked(thirdHeaderID)
 					Expect(err).NotTo(HaveOccurred())
 
 					headers, err := repo.UncheckedHeaders(firstBlock, lastBlock, recheckCheckCount)
@@ -211,7 +219,7 @@ header_id INTEGER NOT NULL REFERENCES public.headers(id) ON DELETE CASCADE
 					excludedHeader := fakes.GetFakeHeader(thirdBlock + 1)
 					excludedHeaderID, createHeaderErr := headerRepository.CreateOrUpdateHeader(excludedHeader)
 					Expect(createHeaderErr).NotTo(HaveOccurred())
-					_, updateHeaderErr := db.Exec(`UPDATE public.headers SET check_count = 1 WHERE id = $1`, excludedHeaderID)
+					updateHeaderErr := repo.MarkHeaderChecked(excludedHeaderID)
 					Expect(updateHeaderErr).NotTo(HaveOccurred())
 
 					headers, err := repo.UncheckedHeaders(firstBlock, lastBlock, recheckCheckCount)
@@ -222,7 +230,7 @@ header_id INTEGER NOT NULL REFERENCES public.headers(id) ON DELETE CASCADE
 				})
 
 				It("includes header with block number > 45 back from latest with check count of 2", func() {
-					_, err = db.Exec(`UPDATE public.headers SET check_count = 1 WHERE id = $1`, secondHeaderID)
+					err := repo.MarkHeaderChecked(secondHeaderID)
 					Expect(err).NotTo(HaveOccurred())
 
 					headers, err := repo.UncheckedHeaders(firstBlock, lastBlock, recheckCheckCount)
@@ -236,8 +244,11 @@ header_id INTEGER NOT NULL REFERENCES public.headers(id) ON DELETE CASCADE
 					excludedHeader := fakes.GetFakeHeader(secondBlock + 1)
 					excludedHeaderID, createHeaderErr := headerRepository.CreateOrUpdateHeader(excludedHeader)
 					Expect(createHeaderErr).NotTo(HaveOccurred())
-					_, updateHeaderErr := db.Exec(`UPDATE public.headers SET check_count = 2 WHERE id = $1`, excludedHeaderID)
-					Expect(updateHeaderErr).NotTo(HaveOccurred())
+
+					firstCheckErr := repo.MarkHeaderChecked(excludedHeaderID)
+					Expect(firstCheckErr).NotTo(HaveOccurred())
+					secondCheckErr := repo.MarkHeaderChecked(excludedHeaderID)
+					Expect(secondCheckErr).NotTo(HaveOccurred())
 
 					headers, err := repo.UncheckedHeaders(firstBlock, lastBlock, 3)
 					Expect(err).NotTo(HaveOccurred())
@@ -279,7 +290,7 @@ header_id INTEGER NOT NULL REFERENCES public.headers(id) ON DELETE CASCADE
 			})
 
 			It("excludes headers that have been checked more than the check count", func() {
-				_, err = db.Exec(`UPDATE public.headers SET check_count = 1 WHERE id = $1`, headerIDs[1])
+				err := repo.MarkHeaderChecked(headerIDs[1])
 				Expect(err).NotTo(HaveOccurred())
 
 				headers, err := repo.UncheckedHeaders(firstBlock, -1, uncheckedCheckCount)
@@ -292,7 +303,7 @@ header_id INTEGER NOT NULL REFERENCES public.headers(id) ON DELETE CASCADE
 
 			Describe("when header has already been checked", func() {
 				It("includes header with block number > 15 back from latest with check count of 1", func() {
-					_, err = db.Exec(`UPDATE public.headers SET check_count = 1 WHERE id = $1`, thirdHeaderID)
+					err := repo.MarkHeaderChecked(thirdHeaderID)
 					Expect(err).NotTo(HaveOccurred())
 
 					headers, err := repo.UncheckedHeaders(firstBlock, -1, recheckCheckCount)
@@ -306,7 +317,7 @@ header_id INTEGER NOT NULL REFERENCES public.headers(id) ON DELETE CASCADE
 					excludedHeader := fakes.GetFakeHeader(thirdBlock + 1)
 					excludedHeaderID, createHeaderErr := headerRepository.CreateOrUpdateHeader(excludedHeader)
 					Expect(createHeaderErr).NotTo(HaveOccurred())
-					_, updateHeaderErr := db.Exec(`UPDATE public.headers SET check_count = 1 WHERE id = $1`, excludedHeaderID)
+					updateHeaderErr := repo.MarkHeaderChecked(excludedHeaderID)
 					Expect(updateHeaderErr).NotTo(HaveOccurred())
 
 					headers, err := repo.UncheckedHeaders(firstBlock, -1, recheckCheckCount)
@@ -316,8 +327,8 @@ header_id INTEGER NOT NULL REFERENCES public.headers(id) ON DELETE CASCADE
 					Expect(headerBlockNumbers).NotTo(ContainElement(excludedHeader.BlockNumber))
 				})
 
-				It("includes header with block number > 45 back from latest with check count of 2", func() {
-					_, err = db.Exec(`UPDATE public.headers SET check_count = 1 WHERE id = $1`, secondHeaderID)
+				It("includes header with block number > 45 back from latest with check count of 1", func() {
+					err := repo.MarkHeaderChecked(secondHeaderID)
 					Expect(err).NotTo(HaveOccurred())
 
 					headers, err := repo.UncheckedHeaders(firstBlock, -1, recheckCheckCount)
@@ -331,7 +342,10 @@ header_id INTEGER NOT NULL REFERENCES public.headers(id) ON DELETE CASCADE
 					excludedHeader := fakes.GetFakeHeader(secondBlock + 1)
 					excludedHeaderID, createHeaderErr := headerRepository.CreateOrUpdateHeader(excludedHeader)
 					Expect(createHeaderErr).NotTo(HaveOccurred())
-					_, updateHeaderErr := db.Exec(`UPDATE public.headers SET check_count = 2 WHERE id = $1`, excludedHeaderID)
+
+					updateHeaderErr := repo.MarkHeaderChecked(excludedHeaderID)
+					Expect(updateHeaderErr).NotTo(HaveOccurred())
+					updateHeaderErr = repo.MarkHeaderChecked(excludedHeaderID)
 					Expect(updateHeaderErr).NotTo(HaveOccurred())
 
 					headers, err := repo.UncheckedHeaders(firstBlock, -1, 3)

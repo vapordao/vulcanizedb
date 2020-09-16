@@ -51,7 +51,7 @@ func backFillEvents() error {
 	blockChain := getBlockChain()
 	db := utils.LoadPostgres(databaseConfig, blockChain.Node())
 
-	extractor := logs.NewLogExtractor(&db, blockChain, repositories.NewCheckedHeadersRepository(&db))
+	extractor := logs.NewLogExtractor(&db, blockChain, repositories.NewCheckedHeadersRepository(&db, genConfig.Schema))
 
 	for _, initializer := range ethEventInitializers {
 		transformer := initializer(&db)
