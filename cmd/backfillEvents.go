@@ -51,7 +51,11 @@ func backFillEvents() error {
 	blockChain := getBlockChain()
 	db := utils.LoadPostgres(databaseConfig, blockChain.Node())
 
-	extractor := logs.NewLogExtractor(&db, blockChain, repositories.NewCheckedHeadersRepository(&db, genConfig.Schema))
+	repo, repoErr := repositories.NewCheckedHeadersRepository(&db, genConfig.Schema)
+	if repoErr != nil {
+		return fmt.Errorf("error creating checked headers repository %w", repoErr)
+	}
+	extractor := logs.NewLogExtractor(&db, blockChain, repo)
 
 	for _, initializer := range ethEventInitializers {
 		transformer := initializer(&db)

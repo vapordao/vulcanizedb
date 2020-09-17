@@ -33,13 +33,25 @@ ON CONFLICT (header_id) DO
 	WHERE checked_headers.header_id = $1`
 )
 
+type SchemaQuery struct {
+	SchemaName string `db:"schema_name"`
+}
+
 type CheckedHeadersRepository struct {
 	db         *postgres.DB
 	schemaName string
 }
 
-func NewCheckedHeadersRepository(db *postgres.DB, schemaName string) CheckedHeadersRepository {
-	return CheckedHeadersRepository{db: db, schemaName: schemaName}
+func NewCheckedHeadersRepository(db *postgres.DB, schemaName string) (*CheckedHeadersRepository, error) {
+	var sq SchemaQuery
+	err := db.Get(&sq, "SELECT schema_name FROM information_schema.schemata WHERE schema_name = $1", schemaName)
+	if err != nil {
+		return nil, fmt.Errorf("error creating checked headers repository - invalid schema %w", err)
+	}
+
+	// Use the SchemaName from the actual information_schema, just in case the
+	// passed in schemaName doesn't exist
+	return &CheckedHeadersRepository{db: db, schemaName: sq.SchemaName}, nil
 }
 
 // Increment check_count for header

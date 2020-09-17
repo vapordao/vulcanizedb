@@ -17,6 +17,7 @@
 package cmd
 
 import (
+	"fmt"
 	"sync"
 	"time"
 
@@ -97,7 +98,11 @@ func executeTransformers() {
 	// Use WaitGroup to wait on both goroutines
 	var wg sync.WaitGroup
 	if len(ethEventInitializers) > 0 {
-		extractor := logs.NewLogExtractor(&db, blockChain, repositories.NewCheckedHeadersRepository(&db, genConfig.Schema))
+		repo, repoErr := repositories.NewCheckedHeadersRepository(&db, genConfig.Schema)
+		if repoErr != nil {
+			LogWithCommand.Fatalf(fmt.Errorf("failed to create checked headers repository: %w", repoErr).Error())
+		}
+		extractor := logs.NewLogExtractor(&db, blockChain, repo)
 		delegator := logs.NewLogDelegator(&db)
 		eventHealthCheckMessage := []byte("event watcher starting\n")
 		statusWriter := fs.NewStatusWriter(healthCheckFile, eventHealthCheckMessage)
