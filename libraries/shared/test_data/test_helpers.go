@@ -11,6 +11,7 @@ import (
 	"github.com/makerdao/vulcanizedb/pkg/datastore"
 	"github.com/makerdao/vulcanizedb/pkg/datastore/postgres"
 	"github.com/makerdao/vulcanizedb/pkg/datastore/postgres/repositories"
+	"github.com/makerdao/vulcanizedb/pkg/fakes"
 	. "github.com/onsi/gomega"
 )
 
@@ -87,4 +88,31 @@ func getRandomAddress() string {
 	hash := getRandomHash()
 	stringHash := hashToPrefixedString(hash)
 	return stringHash[:42]
+}
+
+/// DescribeAValidCheckedHeadersModelWithSchema is provided so that
+/// plugins can easily validate that they have the necessary checked_headers
+/// table in their schema for the execute process.
+///
+/// Use like so in your tests:
+/// var _ = test_data.DescribeAValidCheckedHeadersModelWithSchema("schemaName")
+func ExpectCheckedHeadersInThisSchema(db *postgres.DB, schema string) {
+	Expect(db).NotTo(BeNil())
+	// insert header
+	blockNumber := rand.Int63()
+	fakeHeader := fakes.GetFakeHeader(blockNumber)
+	headerRepo := repositories.NewHeaderRepository(db)
+	headerID, headerErr := headerRepo.CreateOrUpdateHeader(fakeHeader)
+	Expect(headerErr).NotTo(HaveOccurred())
+
+	checkedHeaderRepo, repoErr := repositories.NewCheckedHeadersRepository(db, schema)
+	Expect(repoErr).NotTo(HaveOccurred())
+	uncheckedHeaders, uncheckedHeaderErr := checkedHeaderRepo.UncheckedHeaders(0, -1, 1)
+	Expect(uncheckedHeaderErr).NotTo(HaveOccurred())
+	Expect(len(uncheckedHeaders)).To(Equal(1))
+	Expect(uncheckedHeaders[0].BlockNumber).To(Equal(blockNumber))
+
+	Expect(checkedHeaderRepo.MarkHeaderChecked(headerID)).To(Succeed())
+
+	Expect(checkedHeaderRepo.UncheckedHeaders(0, -1, 1)).To(BeEmpty())
 }
