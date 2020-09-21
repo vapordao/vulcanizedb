@@ -29,14 +29,13 @@ import (
 	"github.com/makerdao/vulcanizedb/pkg/datastore"
 	"github.com/makerdao/vulcanizedb/pkg/datastore/postgres"
 	"github.com/makerdao/vulcanizedb/pkg/datastore/postgres/repositories"
-	"github.com/makerdao/vulcanizedb/test_config"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
 
 var _ = Describe("contractWatcher transformer", func() {
 	var (
-		db               = test_config.NewTestDB(test_config.NewTestNode())
+		db               *postgres.DB
 		err              error
 		blockChain       core.BlockChain
 		headerRepository datastore.HeaderRepository
