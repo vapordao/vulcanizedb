@@ -81,25 +81,26 @@ func (repo CheckedHeadersRepository) UncheckedHeaders(startingBlockNumber, endin
 		recheckOffsetMultiplier = 15
 	)
 
-	joinQuery := fmt.Sprintf(`SELECT h.id, h.block_number, h.hash
-						FROM public.headers h
-						LEFT JOIN %s.checked_headers ch
-						ON ch.header_id = h.id`, repo.schemaName)
+	joinQuery := fmt.Sprintf(`
+WITH checked_headers AS (
+	SELECT h.id, h.block_number, h.hash, COALESCE(ch.check_count, 0) AS check_count
+	FROM public.headers h
+	LEFT JOIN %s.checked_headers ch
+	ON ch.header_id = h.id
+    WHERE h.block_number >= $1
+)
+SELECT id, block_number, hash
+FROM checked_headers
+WHERE ( check_count < 1
+	OR (check_count < $2
+		AND block_number <= ((SELECT MAX(block_number) FROM public.headers) - ($3 * check_count * (check_count + 1) / 2))))
+`, repo.schemaName)
 
 	if endingBlockNumber == -1 {
-		noEndingBlockQuery := fmt.Sprintf(`%s
-				 WHERE ((ch.check_count IS NULL OR ch.check_count < 1) AND h.block_number >= $1)
-				 OR ((ch.check_count IS NULL OR ch.check_count < $2)
-			           AND h.block_number <= ((SELECT MAX(block_number) FROM public.headers) - ($3 * ch.check_count * (ch.check_count + 1) / 2)))`, joinQuery)
-		err = repo.db.Select(&result, noEndingBlockQuery, startingBlockNumber, checkCount, recheckOffsetMultiplier)
+		err = repo.db.Select(&result, joinQuery, startingBlockNumber, checkCount, recheckOffsetMultiplier)
 	} else {
-		endingBlockQuery := fmt.Sprintf(`%s
-        WHERE ((ch.check_count IS NULL OR ch.check_count < 1) AND h.block_number >= $1 AND h.block_number <= $2)
-		OR ((ch.check_count IS NULL OR ch.check_count < $3)
-			AND h.block_number >= $1
-			AND h.block_number <= $2
-			AND h.block_number <= ((SELECT MAX(block_number) FROM public.headers) - ($4 * (ch.check_count * (ch.check_count + 1) / 2))))`, joinQuery)
-		err = repo.db.Select(&result, endingBlockQuery, startingBlockNumber, endingBlockNumber, checkCount, recheckOffsetMultiplier)
+		endingBlockQuery := fmt.Sprintf(`%s AND block_number <= $4`, joinQuery)
+		err = repo.db.Select(&result, endingBlockQuery, startingBlockNumber, checkCount, recheckOffsetMultiplier, endingBlockNumber)
 	}
 
 	return result, err

@@ -171,6 +171,28 @@ var _ = Describe("Checked Headers repository", func() {
 					Expect(headerBlockNumbers).NotTo(ContainElement(lastBlock))
 				})
 
+				It("includes headers that have had their check-count reset", func() {
+					Expect(repo.MarkHeaderChecked(secondHeaderID)).To(Succeed())
+					Expect(repo.MarkSingleHeaderUnchecked(secondBlock)).To(Succeed())
+
+					headers, err := repo.UncheckedHeaders(firstBlock, thirdBlock, uncheckedCheckCount)
+					Expect(err).NotTo(HaveOccurred())
+
+					headerBlockNumbers := getBlockNumbers(headers)
+					Expect(headerBlockNumbers).To(ConsistOf(firstBlock, secondBlock, thirdBlock))
+					Expect(headerBlockNumbers).NotTo(ContainElement(lastBlock))
+				})
+
+				It("excludes headers that are before the first block number", func() {
+					headers, err := repo.UncheckedHeaders(firstBlock+1, thirdBlock, uncheckedCheckCount)
+					Expect(err).NotTo(HaveOccurred())
+
+					headerBlockNumbers := getBlockNumbers(headers)
+					Expect(headerBlockNumbers).To(ConsistOf(secondBlock, thirdBlock))
+					Expect(headerBlockNumbers).NotTo(ContainElement(firstBlock))
+					Expect(headerBlockNumbers).NotTo(ContainElement(lastBlock))
+				})
+
 				It("excludes headers that have been checked more than the check count", func() {
 					Expect(repo.MarkHeaderChecked(secondHeaderID)).To(Succeed())
 
@@ -183,6 +205,16 @@ var _ = Describe("Checked Headers repository", func() {
 				})
 
 				Describe("when header has already been checked", func() {
+					It("excludes headers that are before the first block number", func() {
+						Expect(repo.MarkHeaderChecked(thirdHeaderID)).To(Succeed())
+
+						headers, err := repo.UncheckedHeaders(thirdBlock+1, lastBlock, recheckCheckCount)
+						Expect(err).NotTo(HaveOccurred())
+
+						headerBlockNumbers := getBlockNumbers(headers)
+						Expect(headerBlockNumbers).NotTo(ContainElement(thirdBlock))
+					})
+
 					It("includes header with block number >= 15 back from latest with check count of 1", func() {
 						Expect(repo.MarkHeaderChecked(thirdHeaderID)).To(Succeed())
 
@@ -266,6 +298,18 @@ var _ = Describe("Checked Headers repository", func() {
 					Expect(headerBlockNumbers).To(ConsistOf(firstBlock, secondBlock, thirdBlock, lastBlock))
 				})
 
+				It("includes headers that have had their check-count reset", func() {
+					Expect(repo.MarkHeaderChecked(secondHeaderID)).To(Succeed())
+					Expect(repo.MarkSingleHeaderUnchecked(secondBlock)).To(Succeed())
+
+					headers, err := repo.UncheckedHeaders(firstBlock, thirdBlock, uncheckedCheckCount)
+					Expect(err).NotTo(HaveOccurred())
+
+					headerBlockNumbers := getBlockNumbers(headers)
+					Expect(headerBlockNumbers).To(ConsistOf(firstBlock, secondBlock, thirdBlock))
+					Expect(headerBlockNumbers).NotTo(ContainElement(lastBlock))
+				})
+
 				It("excludes headers that have been checked more than the check count", func() {
 					Expect(repo.MarkHeaderChecked(headerIDs[1])).To(Succeed())
 
@@ -275,6 +319,16 @@ var _ = Describe("Checked Headers repository", func() {
 					headerBlockNumbers := getBlockNumbers(headers)
 					Expect(headerBlockNumbers).To(ConsistOf(firstBlock, thirdBlock, lastBlock))
 					Expect(headerBlockNumbers).NotTo(ContainElement(secondBlock))
+				})
+
+				It("excludes headers that are before the first block number", func() {
+					repo.MarkSingleHeaderUnchecked(secondBlock)
+					headers, err := repo.UncheckedHeaders(firstBlock+1, -1, uncheckedCheckCount)
+					Expect(err).NotTo(HaveOccurred())
+
+					headerBlockNumbers := getBlockNumbers(headers)
+					Expect(headerBlockNumbers).To(ConsistOf(secondBlock, thirdBlock, lastBlock))
+					Expect(headerBlockNumbers).NotTo(ContainElement(firstBlock))
 				})
 
 				Describe("when header has already been checked", func() {
