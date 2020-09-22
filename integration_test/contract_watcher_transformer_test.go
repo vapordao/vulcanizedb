@@ -27,15 +27,15 @@ import (
 	"github.com/makerdao/vulcanizedb/pkg/contract_watcher/transformer"
 	"github.com/makerdao/vulcanizedb/pkg/core"
 	"github.com/makerdao/vulcanizedb/pkg/datastore"
-	"github.com/makerdao/vulcanizedb/pkg/datastore/postgres"
 	"github.com/makerdao/vulcanizedb/pkg/datastore/postgres/repositories"
+	"github.com/makerdao/vulcanizedb/test_config"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
 
 var _ = Describe("contractWatcher transformer", func() {
 	var (
-		db               *postgres.DB
+		db               = test_config.NewTestDB(test_config.NewTestNode())
 		err              error
 		blockChain       core.BlockChain
 		headerRepository datastore.HeaderRepository
@@ -46,12 +46,6 @@ var _ = Describe("contractWatcher transformer", func() {
 
 	BeforeEach(func() {
 		blockChain = SetupBC()
-		db, err := postgres.NewDB(config.Database{
-			Hostname: "localhost",
-			Name:     "vulcanize_testing",
-			Port:     5432,
-		}, blockChain.Node())
-		Expect(err).NotTo(HaveOccurred())
 		headerRepository = repositories.NewHeaderRepository(db)
 	})
 
