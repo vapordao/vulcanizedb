@@ -64,6 +64,11 @@ func init() {
 func resetHeaderCount(blockNumber int64) error {
 	blockChain := getBlockChain()
 	db := utils.LoadPostgres(databaseConfig, blockChain.Node())
-	repo := repositories.NewCheckedHeadersRepository(&db)
+	repo, repoErr := repositories.NewCheckedHeadersRepository(&db, genConfig.Schema)
+
+	if repoErr != nil {
+		return fmt.Errorf("error creating checked headers repository %w", repoErr)
+	}
+
 	return repo.MarkSingleHeaderUnchecked(blockNumber)
 }

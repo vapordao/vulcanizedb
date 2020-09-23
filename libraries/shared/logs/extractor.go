@@ -62,9 +62,9 @@ type LogExtractor struct {
 	RecheckHeaderCap         int64
 }
 
-func NewLogExtractor(db *postgres.DB, bc core.BlockChain) *LogExtractor {
+func NewLogExtractor(db *postgres.DB, bc core.BlockChain, chr datastore.CheckedHeadersRepository) *LogExtractor {
 	return &LogExtractor{
-		CheckedHeadersRepository: repositories.NewCheckedHeadersRepository(db),
+		CheckedHeadersRepository: chr,
 		CheckedLogsRepository:    repositories.NewCheckedLogsRepository(db),
 		Fetcher:                  fetcher.NewLogFetcher(bc),
 		HeaderRepository:         repositories.NewHeaderRepository(db),

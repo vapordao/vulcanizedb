@@ -17,7 +17,6 @@
 package test_config
 
 import (
-	"errors"
 	"fmt"
 	"os"
 
@@ -31,7 +30,6 @@ import (
 
 var TestConfig *viper.Viper
 var DBConfig config.Database
-var TestClient config.Client
 var ABIFilePath string
 
 func init() {
@@ -47,16 +45,6 @@ func setTestConfig() {
 	if err != nil {
 		logrus.Fatal(err)
 	}
-	ipc := TestConfig.GetString("client.ipcPath")
-
-	// If we don't have an ipc path in the config file, check the env variable
-	if ipc == "" {
-		TestConfig.BindEnv("url", "CLIENT_IPCPATH")
-		ipc = TestConfig.GetString("url")
-	}
-	if ipc == "" {
-		logrus.Fatal(errors.New("testing.toml IPC path or $CLIENT_IPCPATH env variable need to be set"))
-	}
 
 	hn := TestConfig.GetString("database.hostname")
 	port := TestConfig.GetInt("database.port")
@@ -66,9 +54,6 @@ func setTestConfig() {
 		Hostname: hn,
 		Name:     name,
 		Port:     port,
-	}
-	TestClient = config.Client{
-		IPCPath: ipc,
 	}
 }
 

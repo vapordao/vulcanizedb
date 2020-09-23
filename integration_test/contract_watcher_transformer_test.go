@@ -14,7 +14,7 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-package integration
+package integration_test
 
 import (
 	"fmt"
@@ -27,15 +27,15 @@ import (
 	"github.com/makerdao/vulcanizedb/pkg/contract_watcher/transformer"
 	"github.com/makerdao/vulcanizedb/pkg/core"
 	"github.com/makerdao/vulcanizedb/pkg/datastore"
-	"github.com/makerdao/vulcanizedb/pkg/datastore/postgres"
 	"github.com/makerdao/vulcanizedb/pkg/datastore/postgres/repositories"
+	"github.com/makerdao/vulcanizedb/test_config"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
 
 var _ = Describe("contractWatcher transformer", func() {
 	var (
-		db               *postgres.DB
+		db               = test_config.NewTestDB(test_config.NewTestNode())
 		err              error
 		blockChain       core.BlockChain
 		headerRepository datastore.HeaderRepository
@@ -45,7 +45,7 @@ var _ = Describe("contractWatcher transformer", func() {
 	)
 
 	BeforeEach(func() {
-		db, blockChain = test_helpers.SetupDBandBC()
+		blockChain = SetupBC()
 		headerRepository = repositories.NewHeaderRepository(db)
 	})
 
