@@ -53,7 +53,7 @@ func backFillEvents() error {
 
 	repo, repoErr := repositories.NewCheckedHeadersRepository(&db, genConfig.Schema)
 	if repoErr != nil {
-		return fmt.Errorf("error creating checked headers repository %w", repoErr)
+		return fmt.Errorf("error creating checked headers repository %w for schema %s", repoErr, genConfig.Schema)
 	}
 	extractor := logs.NewLogExtractor(&db, blockChain, repo)
 

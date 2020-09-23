@@ -17,7 +17,6 @@
 package cmd
 
 import (
-	"fmt"
 	"sync"
 	"time"
 
@@ -100,7 +99,7 @@ func executeTransformers() {
 	if len(ethEventInitializers) > 0 {
 		repo, repoErr := repositories.NewCheckedHeadersRepository(&db, genConfig.Schema)
 		if repoErr != nil {
-			LogWithCommand.Fatalf(fmt.Errorf("failed to create checked headers repository: %w", repoErr).Error())
+			LogWithCommand.Fatalf("failed to create checked headers repository %s for schema %s", repoErr.Error(), genConfig.Schema)
 		}
 		extractor := logs.NewLogExtractor(&db, blockChain, repo)
 		delegator := logs.NewLogDelegator(&db)
