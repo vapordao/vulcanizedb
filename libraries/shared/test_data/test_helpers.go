@@ -90,12 +90,20 @@ func getRandomAddress() string {
 	return stringHash[:42]
 }
 
-/// DescribeAValidCheckedHeadersModelWithSchema is provided so that
+/// ExpectCheckedHeadersInThisSchema is provided so that
 /// plugins can easily validate that they have the necessary checked_headers
 /// table in their schema for the execute process.
 ///
 /// Use like so in your tests:
-/// var _ = test_data.DescribeAValidCheckedHeadersModelWithSchema("schemaName")
+/// var _ = Describe("Your Schema", func() {
+///		BeforeEach(func() {
+///			test_config.CleanTestDB(db)
+///		})
+///
+///		It("has a proper checked headers setup in the schema", func() {
+///			test_data.ExpectCheckedHeadersInThisSchema(db, "yourschemaname")
+///		})
+/// })
 func ExpectCheckedHeadersInThisSchema(db *postgres.DB, schema string) {
 	Expect(db).NotTo(BeNil())
 	// insert header
