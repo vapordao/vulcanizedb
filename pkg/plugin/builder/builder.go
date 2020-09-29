@@ -66,7 +66,7 @@ func (b *builder) BuildPlugin() error {
 	}
 
 	// Build the .go file into a .so plugin
-	execErr := exec.Command("go", "build", "-buildmode=plugin", "-o", soFile, b.goFile).Run()
+	execErr := exec.Command("go", "build", "-mod=mod", "-buildmode=plugin", "-o", soFile, b.goFile).Run()
 	if execErr != nil {
 		return errors.New(fmt.Sprintf("unable to build .so file: %s", execErr.Error()))
 	}
