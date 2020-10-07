@@ -46,30 +46,39 @@ type IStorageWatcher interface {
 type StorageWatcher struct {
 	db                        *postgres.DB
 	HeaderRepository          datastore.HeaderRepository
-	KeccakAddressTransformers map[common.Hash]storage2.ITransformer // keccak hash of an address => transformer
+	AddressTransformers       map[common.Address]storage2.ITransformer // contract address => transformer
 	StorageDiffRepository     storage.DiffRepository
 	DiffBlocksFromHeadOfChain int64 // the number of blocks from the head of the chain where diffs should be processed
 	StatusWriter              fs.StatusWriter
+	DiffStatus                DiffStatusToWatch
 }
 
-func NewStorageWatcher(db *postgres.DB, backFromHeadOfChain int64, statusWriter fs.StatusWriter) StorageWatcher {
+type DiffStatusToWatch int
+
+const (
+	New DiffStatusToWatch = iota
+	Unrecognized
+)
+
+func NewStorageWatcher(db *postgres.DB, backFromHeadOfChain int64, statusWriter fs.StatusWriter, diffStatusToWatch DiffStatusToWatch) StorageWatcher {
 	headerRepository := repositories.NewHeaderRepository(db)
 	storageDiffRepository := storage.NewDiffRepository(db)
-	transformers := make(map[common.Hash]storage2.ITransformer)
+	transformers := make(map[common.Address]storage2.ITransformer)
 	return StorageWatcher{
 		db:                        db,
 		HeaderRepository:          headerRepository,
-		KeccakAddressTransformers: transformers,
+		AddressTransformers:       transformers,
 		StorageDiffRepository:     storageDiffRepository,
 		DiffBlocksFromHeadOfChain: backFromHeadOfChain,
 		StatusWriter:              statusWriter,
+		DiffStatus:                diffStatusToWatch,
 	}
 }
 
 func (watcher StorageWatcher) AddTransformers(initializers []storage2.TransformerInitializer) {
 	for _, initializer := range initializers {
 		storageTransformer := initializer(watcher.db)
-		watcher.KeccakAddressTransformers[storageTransformer.KeccakContractAddress()] = storageTransformer
+		watcher.AddressTransformers[storageTransformer.GetContractAddress()] = storageTransformer
 	}
 }
 
@@ -84,6 +93,44 @@ func (watcher StorageWatcher) Execute() error {
 		if err != nil {
 			logrus.Errorf("error transforming diffs: %s", err.Error())
 			return err
+		}
+	}
+}
+
+func (watcher StorageWatcher) getDiffs(minID, ResultsLimit int) ([]types.PersistedDiff, error) {
+	switch watcher.DiffStatus {
+	case New:
+		return watcher.StorageDiffRepository.GetNewDiffs(minID, ResultsLimit)
+	case Unrecognized:
+		return watcher.StorageDiffRepository.GetUnrecognizedDiffs(minID, ResultsLimit)
+	}
+	return nil, errors.New("Unrecognized diff status")
+}
+
+func (watcher StorageWatcher) transformDiffs() error {
+	minID, minIDErr := watcher.getMinDiffID()
+	if minIDErr != nil && !errors.Is(minIDErr, sql.ErrNoRows) {
+		return fmt.Errorf("error getting min diff ID: %w", minIDErr)
+	}
+
+	for {
+		diffs, extractErr := watcher.getDiffs(minID, ResultsLimit)
+
+		if extractErr != nil {
+			return fmt.Errorf("error getting new diffs: %w", extractErr)
+		}
+		for _, diff := range diffs {
+			transformErr := watcher.transformDiff(diff)
+			if handleErr := watcher.handleTransformError(transformErr, diff); handleErr != nil {
+				return fmt.Errorf("error transforming diff: %w", handleErr)
+			}
+		}
+		lenDiffs := len(diffs)
+		if lenDiffs > 0 {
+			minID = int(diffs[lenDiffs-1].ID)
+		}
+		if lenDiffs < ResultsLimit {
+			return nil
 		}
 	}
 }
@@ -109,44 +156,12 @@ func (watcher StorageWatcher) getMinDiffID() (int, error) {
 
 	return minID, nil
 }
-
-func (watcher StorageWatcher) transformDiffs() error {
-	minID, minIDErr := watcher.getMinDiffID()
-	if minIDErr != nil && !errors.Is(minIDErr, sql.ErrNoRows) {
-		return fmt.Errorf("error getting min diff ID: %w", minIDErr)
-	}
-
-	for {
-		diffs, extractErr := watcher.StorageDiffRepository.GetNewDiffs(minID, ResultsLimit)
-		if extractErr != nil {
-			return fmt.Errorf("error getting unchecked diffs: %w", extractErr)
-		}
-		for _, diff := range diffs {
-			transformErr := watcher.transformDiff(diff)
-			if transformErr != nil {
-				if isCommonTransformError(transformErr) {
-					logrus.Tracef("error transforming diff: %s", transformErr.Error())
-				} else {
-					logrus.Infof("error transforming diff: %s", transformErr.Error())
-				}
-			}
-		}
-		lenDiffs := len(diffs)
-		if lenDiffs > 0 {
-			minID = int(diffs[lenDiffs-1].ID)
-		}
-		if lenDiffs < ResultsLimit {
-			return nil
-		}
-	}
-}
-
 func (watcher StorageWatcher) transformDiff(diff types.PersistedDiff) error {
 	t, watching := watcher.getTransformer(diff)
 	if !watching {
-		markCheckedErr := watcher.StorageDiffRepository.MarkChecked(diff.ID)
-		if markCheckedErr != nil {
-			return fmt.Errorf("error marking diff checked: %w", markCheckedErr)
+		markUnwatchedErr := watcher.StorageDiffRepository.MarkUnwatched(diff.ID)
+		if markUnwatchedErr != nil {
+			return fmt.Errorf("error marking diff %s: %w", storage.Unwatched, markUnwatchedErr)
 		}
 		return nil
 	}
@@ -165,16 +180,16 @@ func (watcher StorageWatcher) transformDiff(diff types.PersistedDiff) error {
 		return fmt.Errorf("error executing storage transformer: %w", executeErr)
 	}
 
-	markCheckedErr := watcher.StorageDiffRepository.MarkChecked(diff.ID)
-	if markCheckedErr != nil {
-		return fmt.Errorf("error marking diff checked: %w", markCheckedErr)
+	markTransformedErr := watcher.StorageDiffRepository.MarkTransformed(diff.ID)
+	if markTransformedErr != nil {
+		return fmt.Errorf("error marking diff %s: %w", storage.Transformed, markTransformedErr)
 	}
 
 	return nil
 }
 
 func (watcher StorageWatcher) getTransformer(diff types.PersistedDiff) (storage2.ITransformer, bool) {
-	storageTransformer, ok := watcher.KeccakAddressTransformers[diff.HashedAddress]
+	storageTransformer, ok := watcher.AddressTransformers[diff.Address]
 	return storageTransformer, ok
 }
 
@@ -198,9 +213,26 @@ func (watcher StorageWatcher) handleDiffWithInvalidHeaderHash(diff types.Persist
 		return fmt.Errorf(msg, diff.ID, maxBlockErr)
 	}
 	if diff.BlockHeight < int(maxBlock)-ReorgWindow {
-		return watcher.StorageDiffRepository.MarkChecked(diff.ID)
+		return watcher.StorageDiffRepository.MarkNoncanonical(diff.ID)
 	}
 	return nil
+}
+
+func (watcher StorageWatcher) handleTransformError(transformErr error, diff types.PersistedDiff) error {
+	if transformErr != nil {
+		if errors.Is(transformErr, types.ErrKeyNotFound) {
+			markUnrecognizedErr := watcher.StorageDiffRepository.MarkUnrecognized(diff.ID)
+			if markUnrecognizedErr != nil {
+				return markUnrecognizedErr
+			}
+		}
+		if isCommonTransformError(transformErr) {
+			logrus.Tracef("error transforming diff: %s", transformErr.Error())
+		} else {
+			logrus.Infof("error transforming diff: %s", transformErr.Error())
+		}
+	}
+	return transformErr
 }
 
 func isCommonTransformError(err error) bool {

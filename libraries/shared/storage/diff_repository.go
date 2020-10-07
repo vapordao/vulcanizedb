@@ -27,9 +27,21 @@ type DiffRepository interface {
 	CreateStorageDiff(rawDiff types.RawDiff) (int64, error)
 	CreateBackFilledStorageValue(rawDiff types.RawDiff) error
 	GetNewDiffs(minID, limit int) ([]types.PersistedDiff, error)
-	MarkChecked(id int64) error
+	GetUnrecognizedDiffs(minID, limit int) ([]types.PersistedDiff, error)
+	MarkTransformed(id int64) error
+	MarkNoncanonical(id int64) error
+	MarkUnrecognized(id int64) error
+	MarkUnwatched(id int64) error
 	GetFirstDiffIDForBlockHeight(blockHeight int64) (int64, error)
 }
+
+var (
+	New          = `new`
+	Noncanonical = `noncanonical`
+	Transformed  = `transformed`
+	Unrecognized = `unrecognized`
+	Unwatched    = `unwatched`
+)
 
 type diffRepository struct {
 	db *postgres.DB
@@ -43,9 +55,9 @@ func NewDiffRepository(db *postgres.DB) diffRepository {
 func (repository diffRepository) CreateStorageDiff(rawDiff types.RawDiff) (int64, error) {
 	var storageDiffID int64
 	row := repository.db.QueryRowx(`INSERT INTO public.storage_diff
-		(hashed_address, block_height, block_hash, storage_key, storage_value) VALUES ($1, $2, $3, $4, $5)
-		ON CONFLICT DO NOTHING RETURNING id`, rawDiff.HashedAddress.Bytes(), rawDiff.BlockHeight, rawDiff.BlockHash.Bytes(),
-		rawDiff.StorageKey.Bytes(), rawDiff.StorageValue.Bytes())
+		(address, block_height, block_hash, storage_key, storage_value, eth_node_id) VALUES ($1, $2, $3, $4, $5, $6)
+		ON CONFLICT DO NOTHING RETURNING id`, rawDiff.Address.Bytes(), rawDiff.BlockHeight, rawDiff.BlockHash.Bytes(),
+		rawDiff.StorageKey.Bytes(), rawDiff.StorageValue.Bytes(), repository.db.NodeID)
 	err := row.Scan(&storageDiffID)
 	if err != nil {
 		return 0, fmt.Errorf("error creating storage diff: %w", err)
@@ -54,9 +66,9 @@ func (repository diffRepository) CreateStorageDiff(rawDiff types.RawDiff) (int64
 }
 
 func (repository diffRepository) CreateBackFilledStorageValue(rawDiff types.RawDiff) error {
-	_, err := repository.db.Exec(`SELECT * FROM public.create_back_filled_diff($1, $2, $3, $4, $5)`,
-		rawDiff.BlockHeight, rawDiff.BlockHash.Bytes(), rawDiff.HashedAddress.Bytes(),
-		rawDiff.StorageKey.Bytes(), rawDiff.StorageValue.Bytes())
+	_, err := repository.db.Exec(`SELECT * FROM public.create_back_filled_diff($1, $2, $3, $4, $5, $6)`,
+		rawDiff.BlockHeight, rawDiff.BlockHash.Bytes(), rawDiff.Address.Bytes(),
+		rawDiff.StorageKey.Bytes(), rawDiff.StorageValue.Bytes(), repository.db.NodeID)
 	if err != nil {
 		return fmt.Errorf("error creating back filled storage value: %w", err)
 	}
@@ -65,16 +77,60 @@ func (repository diffRepository) CreateBackFilledStorageValue(rawDiff types.RawD
 
 func (repository diffRepository) GetNewDiffs(minID, limit int) ([]types.PersistedDiff, error) {
 	var result []types.PersistedDiff
-	query := fmt.Sprintf("SELECT * FROM public.storage_diff WHERE checked IS false and id > %d ORDER BY id ASC LIMIT %d", minID, limit)
-	err := repository.db.Select(&result, query)
+	err := repository.db.Select(
+		&result,
+		`SELECT id, address, block_height, block_hash, storage_key, storage_value, eth_node_id, status, from_backfill
+				FROM public.storage_diff
+				WHERE status = $1 AND id > $2 ORDER BY id ASC LIMIT $3`,
+		New, minID, limit,
+	)
 	if err != nil {
-		return nil, fmt.Errorf("error getting unchecked storage diffs with id greater than %d: %w", minID, err)
+		return nil, fmt.Errorf("error getting new storage diffs with id greater than %d: %w", minID, err)
 	}
 	return result, nil
 }
 
-func (repository diffRepository) MarkChecked(id int64) error {
-	_, err := repository.db.Exec(`UPDATE public.storage_diff SET checked = true WHERE id = $1`, id)
+func (repository diffRepository) GetUnrecognizedDiffs(minID, limit int) ([]types.PersistedDiff, error) {
+	var result []types.PersistedDiff
+	err := repository.db.Select(
+		&result,
+		`SELECT id, address, block_height, block_hash, storage_key, storage_value, eth_node_id, status, from_backfill
+				FROM public.storage_diff
+				WHERE status = $1 AND id > $2 ORDER BY id ASC LIMIT $3`,
+		Unrecognized, minID, limit,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("error getting unrecognized storage diffs with id greater than %d: %w", minID, err)
+	}
+	return result, nil
+}
+
+func (repository diffRepository) MarkTransformed(id int64) error {
+	_, err := repository.db.Exec(`UPDATE public.storage_diff SET status = $1 WHERE id = $2`, Transformed, id)
+	if err != nil {
+		return fmt.Errorf("error marking diff %d transformed: %w", id, err)
+	}
+	return nil
+}
+
+func (repository diffRepository) MarkUnrecognized(id int64) error {
+	_, err := repository.db.Exec(`UPDATE public.storage_diff SET status = $1 WHERE id = $2`, Unrecognized, id)
+	if err != nil {
+		return fmt.Errorf("error marking diff %d checked: %w", id, err)
+	}
+	return nil
+}
+
+func (repository diffRepository) MarkNoncanonical(id int64) error {
+	_, err := repository.db.Exec(`UPDATE public.storage_diff SET status = $1 WHERE id = $2`, Noncanonical, id)
+	if err != nil {
+		return fmt.Errorf("error marking diff %d checked: %w", id, err)
+	}
+	return nil
+}
+
+func (repository diffRepository) MarkUnwatched(id int64) error {
+	_, err := repository.db.Exec(`UPDATE public.storage_diff SET status = $1 WHERE id = $2`, Unwatched, id)
 	if err != nil {
 		return fmt.Errorf("error marking diff %d checked: %w", id, err)
 	}

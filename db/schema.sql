@@ -17,10 +17,37 @@ SET client_min_messages = warning;
 SET row_security = off;
 
 --
--- Name: create_back_filled_diff(bigint, bytea, bytea, bytea, bytea); Type: FUNCTION; Schema: public; Owner: -
+-- Name: public; Type: SCHEMA; Schema: -; Owner: -
 --
 
-CREATE FUNCTION public.create_back_filled_diff(block_height bigint, block_hash bytea, hashed_address bytea, storage_key bytea, storage_value bytea) RETURNS void
+CREATE SCHEMA public;
+
+
+--
+-- Name: SCHEMA public; Type: COMMENT; Schema: -; Owner: -
+--
+
+COMMENT ON SCHEMA public IS 'standard public schema';
+
+
+--
+-- Name: diff_status; Type: TYPE; Schema: public; Owner: -
+--
+
+CREATE TYPE public.diff_status AS ENUM (
+    'new',
+    'transformed',
+    'unrecognized',
+    'noncanonical',
+    'unwatched'
+);
+
+
+--
+-- Name: create_back_filled_diff(bigint, bytea, bytea, bytea, bytea, integer); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.create_back_filled_diff(block_height bigint, block_hash bytea, address bytea, storage_key bytea, storage_value bytea, eth_node_id integer) RETURNS void
     LANGUAGE plpgsql
     AS $$
 DECLARE
@@ -28,7 +55,7 @@ DECLARE
         SELECT storage_diff.storage_value
         FROM public.storage_diff
         WHERE storage_diff.block_height <= create_back_filled_diff.block_height
-          AND storage_diff.hashed_address = create_back_filled_diff.hashed_address
+          AND storage_diff.address = create_back_filled_diff.address
           AND storage_diff.storage_key = create_back_filled_diff.storage_key
         ORDER BY storage_diff.block_height DESC
         LIMIT 1
@@ -40,28 +67,25 @@ BEGIN
     IF last_storage_value = create_back_filled_diff.storage_value THEN
         RETURN;
     END IF;
-
     IF last_storage_value is null and create_back_filled_diff.storage_value = empty_storage_value THEN
         RETURN;
     END IF;
-
-    INSERT INTO public.storage_diff (block_height, block_hash, hashed_address, storage_key, storage_value,
-                                     from_backfill)
+    INSERT INTO public.storage_diff (block_height, block_hash, address, storage_key, storage_value,
+                                     eth_node_id, from_backfill)
     VALUES (create_back_filled_diff.block_height, create_back_filled_diff.block_hash,
-            create_back_filled_diff.hashed_address, create_back_filled_diff.storage_key,
-            create_back_filled_diff.storage_value, true)
+            create_back_filled_diff.address, create_back_filled_diff.storage_key,
+            create_back_filled_diff.storage_value, create_back_filled_diff.eth_node_id, true)
     ON CONFLICT DO NOTHING;
-
     RETURN;
 END
 $$;
 
 
 --
--- Name: FUNCTION create_back_filled_diff(block_height bigint, block_hash bytea, hashed_address bytea, storage_key bytea, storage_value bytea); Type: COMMENT; Schema: public; Owner: -
+-- Name: FUNCTION create_back_filled_diff(block_height bigint, block_hash bytea, address bytea, storage_key bytea, storage_value bytea, eth_node_id integer); Type: COMMENT; Schema: public; Owner: -
 --
 
-COMMENT ON FUNCTION public.create_back_filled_diff(block_height bigint, block_hash bytea, hashed_address bytea, storage_key bytea, storage_value bytea) IS '@omit';
+COMMENT ON FUNCTION public.create_back_filled_diff(block_height bigint, block_hash bytea, address bytea, storage_key bytea, storage_value bytea, eth_node_id integer) IS '@omit';
 
 
 --
@@ -93,22 +117,39 @@ BEGIN
     IF matching_header_id != 0 THEN
         RETURN matching_header_id;
     END IF;
-
     IF nonmatching_header_id != 0 AND block_number <= max_block_number - 15 THEN
         RETURN nonmatching_header_id;
     END IF;
-
     IF nonmatching_header_id != 0 AND block_number > max_block_number - 15 THEN
         DELETE FROM public.headers WHERE id = nonmatching_header_id;
     END IF;
-
     INSERT INTO public.headers (hash, block_number, raw, block_timestamp, eth_node_id)
     VALUES (get_or_create_header.hash, get_or_create_header.block_number, get_or_create_header.raw,
             get_or_create_header.block_timestamp, get_or_create_header.eth_node_id)
     RETURNING id INTO inserted_header_id;
-
     RETURN inserted_header_id;
 END
+$$;
+
+
+--
+-- Name: FUNCTION get_or_create_header(block_number bigint, hash character varying, raw jsonb, block_timestamp numeric, eth_node_id integer); Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON FUNCTION public.get_or_create_header(block_number bigint, hash character varying, raw jsonb, block_timestamp numeric, eth_node_id integer) IS '@omit';
+
+
+--
+-- Name: set_event_log_updated(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.set_event_log_updated() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+    NEW.updated = NOW();
+    RETURN NEW;
+END;
 $$;
 
 
@@ -117,6 +158,48 @@ $$;
 --
 
 CREATE FUNCTION public.set_header_updated() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+    NEW.updated = NOW();
+    RETURN NEW;
+END;
+$$;
+
+
+--
+-- Name: set_receipt_updated(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.set_receipt_updated() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+    NEW.updated = NOW();
+    RETURN NEW;
+END;
+$$;
+
+
+--
+-- Name: set_storage_updated(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.set_storage_updated() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+    NEW.updated = NOW();
+    RETURN NEW;
+END;
+$$;
+
+
+--
+-- Name: set_transaction_updated(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.set_transaction_updated() RETURNS trigger
     LANGUAGE plpgsql
     AS $$
 BEGIN
@@ -135,9 +218,8 @@ SET default_with_oids = false;
 --
 
 CREATE TABLE public.addresses (
-    id integer NOT NULL,
-    address character varying(42),
-    hashed_address character varying(66)
+    id bigint NOT NULL,
+    address character varying(42)
 );
 
 
@@ -146,7 +228,6 @@ CREATE TABLE public.addresses (
 --
 
 CREATE SEQUENCE public.addresses_id_seq
-    AS integer
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -229,9 +310,9 @@ ALTER SEQUENCE public.eth_nodes_id_seq OWNED BY public.eth_nodes.id;
 --
 
 CREATE TABLE public.event_logs (
-    id integer NOT NULL,
+    id bigint NOT NULL,
     header_id integer NOT NULL,
-    address integer NOT NULL,
+    address bigint NOT NULL,
     topics bytea[],
     data bytea,
     block_number bigint,
@@ -240,7 +321,9 @@ CREATE TABLE public.event_logs (
     tx_index integer,
     log_index integer,
     raw jsonb,
-    transformed boolean DEFAULT false NOT NULL
+    transformed boolean DEFAULT false NOT NULL,
+    created timestamp without time zone DEFAULT now() NOT NULL,
+    updated timestamp without time zone DEFAULT now() NOT NULL
 );
 
 
@@ -249,7 +332,6 @@ CREATE TABLE public.event_logs (
 --
 
 CREATE SEQUENCE public.event_logs_id_seq
-    AS integer
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -306,7 +388,6 @@ CREATE TABLE public.headers (
     block_number bigint NOT NULL,
     raw jsonb,
     block_timestamp numeric,
-    check_count integer DEFAULT 0 NOT NULL,
     eth_node_id integer NOT NULL,
     created timestamp without time zone DEFAULT now() NOT NULL,
     updated timestamp without time zone DEFAULT now() NOT NULL
@@ -341,13 +422,15 @@ CREATE TABLE public.receipts (
     id integer NOT NULL,
     transaction_id integer NOT NULL,
     header_id integer NOT NULL,
-    contract_address_id integer NOT NULL,
+    contract_address_id bigint NOT NULL,
     cumulative_gas_used numeric,
     gas_used numeric,
     state_root character varying(66),
     status integer,
     tx_hash character varying(66),
-    rlp bytea
+    rlp bytea,
+    created timestamp without time zone DEFAULT now() NOT NULL,
+    updated timestamp without time zone DEFAULT now() NOT NULL
 );
 
 
@@ -377,13 +460,16 @@ ALTER SEQUENCE public.receipts_id_seq OWNED BY public.receipts.id;
 
 CREATE TABLE public.storage_diff (
     id bigint NOT NULL,
+    address bytea,
     block_height bigint,
     block_hash bytea,
-    hashed_address bytea,
     storage_key bytea,
     storage_value bytea,
-    checked boolean DEFAULT false NOT NULL,
-    from_backfill boolean DEFAULT false NOT NULL
+    eth_node_id integer NOT NULL,
+    status public.diff_status DEFAULT 'new'::public.diff_status NOT NULL,
+    from_backfill boolean DEFAULT false NOT NULL,
+    created timestamp without time zone DEFAULT now() NOT NULL,
+    updated timestamp without time zone DEFAULT now() NOT NULL
 );
 
 
@@ -422,7 +508,9 @@ CREATE TABLE public.transactions (
     tx_from character varying(44),
     tx_index integer,
     tx_to character varying(44),
-    value numeric
+    value numeric,
+    created timestamp without time zone DEFAULT now() NOT NULL,
+    updated timestamp without time zone DEFAULT now() NOT NULL
 );
 
 
@@ -652,11 +740,11 @@ ALTER TABLE ONLY public.receipts
 
 
 --
--- Name: storage_diff storage_diff_block_height_block_hash_hashed_address_storage_key; Type: CONSTRAINT; Schema: public; Owner: -
+-- Name: storage_diff storage_diff_block_height_block_hash_address_storage_key_st_key; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.storage_diff
-    ADD CONSTRAINT storage_diff_block_height_block_hash_hashed_address_storage_key UNIQUE (block_height, block_hash, hashed_address, storage_key, storage_value);
+    ADD CONSTRAINT storage_diff_block_height_block_hash_address_storage_key_st_key UNIQUE (block_height, block_hash, address, storage_key, storage_value);
 
 
 --
@@ -709,7 +797,7 @@ CREATE INDEX event_logs_transaction ON public.event_logs USING btree (tx_hash);
 -- Name: event_logs_untransformed; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX event_logs_untransformed ON public.event_logs USING btree (transformed) WHERE (transformed IS FALSE);
+CREATE INDEX event_logs_untransformed ON public.event_logs USING btree (transformed) WHERE (transformed = false);
 
 
 --
@@ -724,13 +812,6 @@ CREATE INDEX headers_block_number ON public.headers USING btree (block_number);
 --
 
 CREATE INDEX headers_block_timestamp_index ON public.headers USING btree (block_timestamp);
-
-
---
--- Name: headers_check_count; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX headers_check_count ON public.headers USING btree (check_count);
 
 
 --
@@ -755,10 +836,24 @@ CREATE INDEX receipts_transaction ON public.receipts USING btree (transaction_id
 
 
 --
--- Name: storage_diff_checked_index; Type: INDEX; Schema: public; Owner: -
+-- Name: storage_diff_eth_node; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX storage_diff_checked_index ON public.storage_diff USING btree (checked) WHERE (checked IS FALSE);
+CREATE INDEX storage_diff_eth_node ON public.storage_diff USING btree (eth_node_id);
+
+
+--
+-- Name: storage_diff_new_status_index; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX storage_diff_new_status_index ON public.storage_diff USING btree (status) WHERE (status = 'new'::public.diff_status);
+
+
+--
+-- Name: storage_diff_unrecognized_status_index; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX storage_diff_unrecognized_status_index ON public.storage_diff USING btree (status) WHERE (status = 'unrecognized'::public.diff_status);
 
 
 --
@@ -769,10 +864,38 @@ CREATE INDEX transactions_header ON public.transactions USING btree (header_id);
 
 
 --
+-- Name: event_logs event_log_updated; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER event_log_updated BEFORE UPDATE ON public.event_logs FOR EACH ROW EXECUTE PROCEDURE public.set_event_log_updated();
+
+
+--
 -- Name: headers header_updated; Type: TRIGGER; Schema: public; Owner: -
 --
 
 CREATE TRIGGER header_updated BEFORE UPDATE ON public.headers FOR EACH ROW EXECUTE PROCEDURE public.set_header_updated();
+
+
+--
+-- Name: receipts receipt_updated; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER receipt_updated BEFORE UPDATE ON public.receipts FOR EACH ROW EXECUTE PROCEDURE public.set_receipt_updated();
+
+
+--
+-- Name: storage_diff storage_updated; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER storage_updated BEFORE UPDATE ON public.storage_diff FOR EACH ROW EXECUTE PROCEDURE public.set_storage_updated();
+
+
+--
+-- Name: transactions transaction_updated; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER transaction_updated BEFORE UPDATE ON public.transactions FOR EACH ROW EXECUTE PROCEDURE public.set_transaction_updated();
 
 
 --
@@ -837,6 +960,14 @@ ALTER TABLE ONLY public.receipts
 
 ALTER TABLE ONLY public.receipts
     ADD CONSTRAINT receipts_transaction_id_fkey FOREIGN KEY (transaction_id) REFERENCES public.transactions(id) ON DELETE CASCADE;
+
+
+--
+-- Name: storage_diff storage_diff_eth_node_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.storage_diff
+    ADD CONSTRAINT storage_diff_eth_node_id_fkey FOREIGN KEY (eth_node_id) REFERENCES public.eth_nodes(id) ON DELETE CASCADE;
 
 
 --

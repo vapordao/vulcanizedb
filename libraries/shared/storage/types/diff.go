@@ -21,26 +21,27 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/ethereum/go-ethereum/eth/filters"
 	"github.com/ethereum/go-ethereum/rlp"
-	"github.com/ethereum/go-ethereum/statediff"
 )
 
 const ExpectedRowLength = 5
 
 type RawDiff struct {
-	HashedAddress common.Hash `db:"hashed_address"`
-	BlockHash     common.Hash `db:"block_hash"`
-	BlockHeight   int         `db:"block_height"`
-	StorageKey    common.Hash `db:"storage_key"`
-	StorageValue  common.Hash `db:"storage_value"`
+	Address      common.Address `db:"address"`
+	BlockHash    common.Hash    `db:"block_hash"`
+	BlockHeight  int            `db:"block_height"`
+	StorageKey   common.Hash    `db:"storage_key"`
+	StorageValue common.Hash    `db:"storage_value"`
 }
 
 type PersistedDiff struct {
 	RawDiff
-	Checked      bool
+	Status       string
 	FromBackfill bool `db:"from_backfill"`
 	ID           int64
 	HeaderID     int64 `db:"header_id"`
+	EthNodeID    int64 `db:"eth_node_id"`
 }
 
 func FromParityCsvRow(csvRow []string) (RawDiff, error) {
@@ -52,15 +53,15 @@ func FromParityCsvRow(csvRow []string) (RawDiff, error) {
 		return RawDiff{}, err
 	}
 	return RawDiff{
-		HashedAddress: HexToKeccak256Hash(csvRow[0]),
-		BlockHash:     common.HexToHash(csvRow[1]),
-		BlockHeight:   height,
-		StorageKey:    common.HexToHash(csvRow[3]),
-		StorageValue:  common.HexToHash(csvRow[4]),
+		Address:      common.HexToAddress(csvRow[0]),
+		BlockHash:    common.HexToHash(csvRow[1]),
+		BlockHeight:  height,
+		StorageKey:   common.HexToHash(csvRow[3]),
+		StorageValue: common.HexToHash(csvRow[4]),
 	}, nil
 }
 
-func FromOldGethStateDiff(account statediff.AccountDiff, stateDiff *statediff.StateDiff, storage statediff.StorageDiff) (RawDiff, error) {
+func FromGethStateDiff(account filters.AccountDiff, stateDiff *filters.StateDiff, storage filters.StorageDiff) (RawDiff, error) {
 	var decodedRLPStorageValue []byte
 	err := rlp.DecodeBytes(storage.Value, &decodedRLPStorageValue)
 	if err != nil {
@@ -68,35 +69,12 @@ func FromOldGethStateDiff(account statediff.AccountDiff, stateDiff *statediff.St
 	}
 
 	return RawDiff{
-		HashedAddress: common.BytesToHash(account.Key),
-		BlockHash:     stateDiff.BlockHash,
-		BlockHeight:   int(stateDiff.BlockNumber.Int64()),
-		StorageKey:    common.BytesToHash(storage.Key),
-		StorageValue:  common.BytesToHash(decodedRLPStorageValue),
+		Address:      common.BytesToAddress(account.Key),
+		BlockHash:    stateDiff.BlockHash,
+		BlockHeight:  int(stateDiff.BlockNumber.Int64()),
+		StorageKey:   common.BytesToHash(storage.Key),
+		StorageValue: common.BytesToHash(decodedRLPStorageValue),
 	}, nil
-}
-
-func FromNewGethStateDiff(account statediff.AccountDiff, stateDiff *statediff.StateDiff, storage statediff.StorageDiff) (RawDiff, error) {
-	var decodedRLPStorageValue []byte
-	err := rlp.DecodeBytes(storage.Value, &decodedRLPStorageValue)
-	if err != nil {
-		return RawDiff{}, err
-	}
-
-	return RawDiff{
-		HashedAddress: crypto.Keccak256Hash(account.Key),
-		BlockHash:     stateDiff.BlockHash,
-		BlockHeight:   int(stateDiff.BlockNumber.Int64()),
-		StorageKey:    crypto.Keccak256Hash(storage.Key),
-		StorageValue:  common.BytesToHash(decodedRLPStorageValue),
-	}, nil
-}
-
-func ToPersistedDiff(raw RawDiff, id int64) PersistedDiff {
-	return PersistedDiff{
-		RawDiff: raw,
-		ID:      id,
-	}
 }
 
 func HexToKeccak256Hash(hex string) common.Hash {
