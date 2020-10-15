@@ -16,6 +16,11 @@ import (
 	"github.com/spf13/viper"
 )
 
+var (
+	storageDiffsPath   string
+	storageDiffsSource string
+)
+
 // extractDiffsCmd represents the extractDiffs command
 var extractDiffsCmd = &cobra.Command{
 	Use:   "extractDiffs",
@@ -32,6 +37,8 @@ written to public.storage_diff.`,
 
 func init() {
 	rootCmd.AddCommand(extractDiffsCmd)
+	extractDiffsCmd.Flags().StringVarP(&storageDiffsSource, "storageDiffs-source", "s", "csv", "where to get the state diffs: csv or geth")
+	extractDiffsCmd.Flags().StringVarP(&storageDiffsPath, "fileSystem-storageDiffsPath", "p", "", "location of storage diffs csv file")
 }
 
 func getContractAddresses() []string {
