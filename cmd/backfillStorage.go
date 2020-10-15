@@ -24,9 +24,10 @@ var (
 var backfillStorageCmd = &cobra.Command{
 	Use:   "backfillStorage",
 	Short: "Backfill smart contract storage for a range of blocks",
-	Long: `Fetch and persist contract storage for a range of blocks. Useful if you have started watching diffs from a
-new contract but do not have storage data from before you started running the transformer.
-Requires a config file structured the same as it would be for running compose or composeAndExecute (to specify which
+	Long: `Run this command to fetch and persist contract storage for a range of blocks. Useful
+if you have started watching diffs from a new contract but do not have storage data from before
+you started running the transformer.
+Requires a config file structured the same as it would be for running compose or execute (to specify which
 addresses and storage slots must be back-filled).
 Requires CLI flags are backfill-storage-start-block (-s) and backfill-storage-end-block (-e) to define range of blocks
 that need to be back-filled.

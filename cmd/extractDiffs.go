@@ -20,9 +20,9 @@ import (
 var extractDiffsCmd = &cobra.Command{
 	Use:   "extractDiffs",
 	Short: "Extract storage diffs from a node and write them to postgres",
-	Long: `Reads storage diffs from either a CSV or JSON RPC subscription.
+	Long: `Run this command to reads storage diffs from either a CSV or JSON RPC subscription.
 	Configure which with the STORAGEDIFFS_SOURCE flag. Received diffs are
-	written to public.storage_diff.`,
+written to public.storage_diff.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		SubCommand = cmd.CalledAs()
 		LogWithCommand = *logrus.WithField("SubCommand", SubCommand)

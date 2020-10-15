@@ -26,74 +26,11 @@ import (
 var composeCmd = &cobra.Command{
 	Use:   "compose",
 	Short: "Composes transformer initializer plugin",
-	Long: `This command needs a config .toml file of form:
+	Long: `Run this command in order to write and build a go plugin with a list
+of transformers specified in the config file. The plugin is loaded and the set
+of transformer initializers can be executed over by the appropriate watcher.
 
-[database]
-    name     = "vulcanize_public"
-    hostname = "localhost"
-    user     = "vulcanize"
-    password = "vulcanize"
-    port     = 5432
-
-[client]
-    ipcPath  = "/Users/user/Library/Ethereum/geth.ipc"
-
-[exporter]
-    home     = "github.com/makerdao/vulcanizedb"
-    name     = "exampleTransformerExporter"
-    schema   = "<plugin schema>"
-    save     = false
-    transformerNames = [
-        "transformer1",
-        "transformer2",
-        "transformer3",
-        "transformer4",
-    ]
-    [exporter.transformer1]
-        path = "path/to/transformer1"
-        type = "eth_event"
-        repository = "github.com/account/repo"
-        migrations = "db/migrations"
-        rank = "0"
-    [exporter.transformer2]
-        path = "path/to/transformer2"
-        type = "eth_contract"
-        repository = "github.com/account/repo"
-        migrations = "db/migrations"
-        rank = "0"
-    [exporter.transformer3]
-        path = "path/to/transformer3"
-        type = "eth_event"
-        repository = "github.com/account/repo"
-        migrations = "db/migrations"
-        rank = "0"
-    [exporter.transformer4]
-        path = "path/to/transformer4"
-        type = "eth_storage"
-        repository = "github.com/account2/repo2"
-        migrations = "to/db/migrations"
-        rank = "1"
-
-
-Note: If any of the plugin transformer need additional
-configuration variables include them in the .toml file as well
-
-This information is used to write and build a go plugin with a transformer 
-set composed from the transformer imports specified in the config file
-This plugin is loaded and the set of transformer initializers is exported
-from it and loaded into and executed over by the appropriate watcher. 
-
-The type of watcher that the transformer works with is specified using the 
-type variable for each transformer in the config. Currently there are watchers 
-of event data from an eth node (eth_event) and storage data from an eth node 
-(eth_storage), and a more generic interface for accepting contract_watcher pkg
-based transformers which can perform event watching provided only a contract
-address (eth_contract).
-
-Transformers of different types can be ran together in the same command using a 
-single config file or in separate command instances using different config files
-
-Specify config location when executing the command:
+This command needs a config file location specified:
 ./vulcanizedb compose --config=./environments/config_name.toml`,
 	Run: func(cmd *cobra.Command, args []string) {
 		SubCommand = cmd.CalledAs()

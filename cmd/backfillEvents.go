@@ -15,8 +15,8 @@ var endingBlockNumber int64
 // backfillEventsCmd represents the backfillEvents command
 var backfillEventsCmd = &cobra.Command{
 	Use:   "backfillEvents",
-	Short: "BackFill events from already-checked headers",
-	Long: `Fetch and persist events from configured transformers across a range
+	Short: "Backfill events from already-checked headers",
+	Long: `Run this command to fetch and persist events from configured transformers across a range
 of headers that may have already been checked for logs. Useful when adding a
 new event transformer to an instance that has already been running and marking
 headers checked as it queried for the previous (now incomplete) set of logs.`,

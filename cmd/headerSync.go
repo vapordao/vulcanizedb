@@ -34,21 +34,11 @@ import (
 var headerSyncCmd = &cobra.Command{
 	Use:   "headerSync",
 	Short: "Syncs VulcanizeDB with local ethereum node's block headers",
-	Long: `Syncs VulcanizeDB with local ethereum node. Populates
+	Long: `Run this command to sync VulcanizeDB with an ethereum node. Populates
 Postgres with block headers.
 
-./vulcanizedb headerSync --starting-block-number 0 --config public.toml
-
-Expects ethereum node to be running and requires a .toml config:
-
-  [database]
-  name = "vulcanize_public"
-  hostname = "localhost"
-  port = 5432
-
-  [client]
-  ipcPath = "/Users/user/Library/Ethereum/geth.ipc"
-`,
+This command needs a config file location specified:
+./vulcanizedb headerSync --starting-block-number 0 --config public.toml`,
 	Run: func(cmd *cobra.Command, args []string) {
 		SubCommand = cmd.CalledAs()
 		LogWithCommand = *logrus.WithField("SubCommand", SubCommand)
