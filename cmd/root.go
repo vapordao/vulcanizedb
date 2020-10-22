@@ -52,8 +52,6 @@ var (
 	recheckHeadersArg                    bool
 	retryInterval                        time.Duration
 	startingBlockNumber                  int64
-	storageDiffsPath                     string
-	storageDiffsSource                   string
 )
 
 const (
@@ -84,8 +82,6 @@ func initFuncs(cmd *cobra.Command, args []string) {
 
 func setViperConfigs() {
 	ipc = viper.GetString("client.ipcpath")
-	storageDiffsPath = viper.GetString("filesystem.storageDiffsPath")
-	storageDiffsSource = viper.GetString("storageDiffs.source")
 	databaseConfig = config.Database{
 		Name:     viper.GetString("database.name"),
 		Hostname: viper.GetString("database.hostname"),
@@ -122,8 +118,6 @@ func init() {
 	rootCmd.PersistentFlags().String("database-user", "", "database user")
 	rootCmd.PersistentFlags().String("database-password", "", "database password")
 	rootCmd.PersistentFlags().String("client-ipcPath", "", "location of geth.ipc file")
-	rootCmd.PersistentFlags().String("filesystem-storageDiffsPath", "", "location of storage diffs csv file")
-	rootCmd.PersistentFlags().String("storageDiffs-source", "csv", "where to get the state diffs: csv or geth")
 	rootCmd.PersistentFlags().String("exporter-name", "exporter", "name of exporter plugin")
 	rootCmd.PersistentFlags().String("log-level", logrus.InfoLevel.String(), "Log level (trace, debug, info, warn, error, fatal, panic")
 
@@ -133,8 +127,6 @@ func init() {
 	viper.BindPFlag("database.user", rootCmd.PersistentFlags().Lookup("database-user"))
 	viper.BindPFlag("database.password", rootCmd.PersistentFlags().Lookup("database-password"))
 	viper.BindPFlag("client.ipcPath", rootCmd.PersistentFlags().Lookup("client-ipcPath"))
-	viper.BindPFlag("filesystem.storageDiffsPath", rootCmd.PersistentFlags().Lookup("filesystem-storageDiffsPath"))
-	viper.BindPFlag("storageDiffs.source", rootCmd.PersistentFlags().Lookup("storageDiffs-source"))
 	viper.BindPFlag("exporter.fileName", rootCmd.PersistentFlags().Lookup("exporter-name"))
 	viper.BindPFlag("log.level", rootCmd.PersistentFlags().Lookup("log-level"))
 }

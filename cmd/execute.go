@@ -36,31 +36,14 @@ import (
 // executeCmd represents the execute command
 var executeCmd = &cobra.Command{
 	Use:   "execute",
-	Short: "executes a precomposed transformer initializer plugin",
-	Long: `This command needs a config .toml file of form:
+	Short: "Executes a precomposed transformer initializer plugin",
+	Long: `Run this command to take the composed plugin and pass it to the appropriate watcher 
+to execute over. The plugin file needs to be located in the /plugins directory 
+and this command assumes the db migrations remain from when the plugin was composed.
+Additionally, the plugin must have been composed by the same version of vulcanizedb 
+or else it will not be compatible.
 
-[database]
-    name     = "vulcanize_public"
-    hostname = "localhost"
-    user     = "vulcanize"
-    password = "vulcanize"
-    port     = 5432
-
-[client]
-    ipcPath  = "/Users/user/Library/Ethereum/geth.ipc"
-
-[exporter]
-    name     = "exampleTransformerExporter"
-
-Note: If any of the plugin transformer need additional
-configuration variables include them in the .toml file as well
-
-The exporter.name is the name (without extension) of the plugin to be loaded.
-The plugin file needs to be located in the /plugins directory and this command assumes 
-the db migrations remain from when the plugin was composed. Additionally, the plugin 
-must have been composed by the same version of vulcanizedb or else it will not be compatible.
-
-Specify config location when executing the command:
+This command needs a config file location specified: 
 ./vulcanizedb execute --config=./environments/config_name.toml`,
 	Run: func(cmd *cobra.Command, args []string) {
 		SubCommand = cmd.CalledAs()

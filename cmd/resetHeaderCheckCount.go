@@ -34,7 +34,8 @@ var (
 var resetHeaderCheckCountCmd = &cobra.Command{
 	Use:   "resetHeaderCheckCount",
 	Short: "Resets header check_count for the given block number",
-	Long: fmt.Sprintf(`Resets check_count to zero for the given header so that the execute command may recheck that header's logs in case one was missed.
+	Long: fmt.Sprintf(`Run this command to reset the check_count to zero for a given header so that
+the execute command may recheck that header's logs in case one was missed.
 
 Use: ./vulcanizedb resetHeaderCheckCount --%s=<block number>`, resetHeaderFlagName),
 	RunE: func(cmd *cobra.Command, args []string) error {

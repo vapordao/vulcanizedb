@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/ethereum/go-ethereum"
@@ -16,13 +17,19 @@ import (
 	"github.com/spf13/viper"
 )
 
+var (
+	storageDiffsPathFlag   = "fileSystem-storageDiffsPath"
+	storageDiffsPath       string
+	storageDiffsSourceFlag = "storageDiffs-source"
+	storageDiffsSource     string
+)
+
 // extractDiffsCmd represents the extractDiffs command
 var extractDiffsCmd = &cobra.Command{
 	Use:   "extractDiffs",
 	Short: "Extract storage diffs from a node and write them to postgres",
-	Long: `Reads storage diffs from either a CSV or JSON RPC subscription.
-	Configure which with the STORAGEDIFFS_SOURCE flag. Received diffs are
-	written to public.storage_diff.`,
+	Long: fmt.Sprintf(`Run this command to reads storage diffs from either a CSV or JSON RPC subscription.
+Configure which with the %s flag. Received diffs are written to public.storage_diff.`, storageDiffsSourceFlag),
 	Run: func(cmd *cobra.Command, args []string) {
 		SubCommand = cmd.CalledAs()
 		LogWithCommand = *logrus.WithField("SubCommand", SubCommand)
@@ -32,6 +39,8 @@ var extractDiffsCmd = &cobra.Command{
 
 func init() {
 	rootCmd.AddCommand(extractDiffsCmd)
+	extractDiffsCmd.Flags().StringVarP(&storageDiffsSource, storageDiffsSourceFlag, "s", "csv", "where to get the state diffs: csv or geth")
+	extractDiffsCmd.Flags().StringVarP(&storageDiffsPath, storageDiffsPathFlag, "p", "", "location of storage diffs csv file")
 }
 
 func getContractAddresses() []string {

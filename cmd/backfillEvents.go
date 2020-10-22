@@ -10,13 +10,16 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var endingBlockNumber int64
+var (
+	endingBlockNumber         int64
+	endingBlockNumberFlagName = "ending-block-number"
+)
 
 // backfillEventsCmd represents the backfillEvents command
 var backfillEventsCmd = &cobra.Command{
 	Use:   "backfillEvents",
-	Short: "BackFill events from already-checked headers",
-	Long: `Fetch and persist events from configured transformers across a range
+	Short: "Backfill events from already-checked headers",
+	Long: `Run this command to fetch and persist events from configured transformers across a range
 of headers that may have already been checked for logs. Useful when adding a
 new event transformer to an instance that has already been running and marking
 headers checked as it queried for the previous (now incomplete) set of logs.`,
@@ -33,8 +36,8 @@ headers checked as it queried for the previous (now incomplete) set of logs.`,
 
 func init() {
 	rootCmd.AddCommand(backfillEventsCmd)
-	backfillEventsCmd.Flags().Int64VarP(&endingBlockNumber, "ending-block-number", "e", -1, "last block from which to back-fill events")
-	backfillEventsCmd.MarkFlagRequired("ending-block-number")
+	backfillEventsCmd.Flags().Int64VarP(&endingBlockNumber, endingBlockNumberFlagName, "e", -1, "last block from which to back-fill events")
+	backfillEventsCmd.MarkFlagRequired(endingBlockNumberFlagName)
 }
 
 func backFillEvents() error {
