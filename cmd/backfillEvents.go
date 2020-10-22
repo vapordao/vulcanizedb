@@ -10,7 +10,10 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var endingBlockNumber int64
+var (
+	endingBlockNumber         int64
+	endingBlockNumberFlagName = "ending-block-number"
+)
 
 // backfillEventsCmd represents the backfillEvents command
 var backfillEventsCmd = &cobra.Command{
@@ -33,8 +36,8 @@ headers checked as it queried for the previous (now incomplete) set of logs.`,
 
 func init() {
 	rootCmd.AddCommand(backfillEventsCmd)
-	backfillEventsCmd.Flags().Int64VarP(&endingBlockNumber, "ending-block-number", "e", -1, "last block from which to back-fill events")
-	backfillEventsCmd.MarkFlagRequired("ending-block-number")
+	backfillEventsCmd.Flags().Int64VarP(&endingBlockNumber, endingBlockNumberFlagName, "e", -1, "last block from which to back-fill events")
+	backfillEventsCmd.MarkFlagRequired(endingBlockNumberFlagName)
 }
 
 func backFillEvents() error {

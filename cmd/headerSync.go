@@ -30,15 +30,16 @@ import (
 	"github.com/spf13/cobra"
 )
 
+var startingBlockFlagName = "starting-block-number"
+
 // headerSyncCmd represents the headerSync command
 var headerSyncCmd = &cobra.Command{
 	Use:   "headerSync",
 	Short: "Syncs VulcanizeDB with local ethereum node's block headers",
-	Long: `Run this command to sync VulcanizeDB with an ethereum node. Populates
-Postgres with block headers.
+	Long: `Run this command to sync VulcanizeDB with an ethereum node. It populates
+Postgres with block headers. You may point to a config file, specify settings via 
+CLI flags, or it will attempt to run with default values.`,
 
-This command needs a config file location specified:
-./vulcanizedb headerSync --starting-block-number 0 --config public.toml`,
 	Run: func(cmd *cobra.Command, args []string) {
 		SubCommand = cmd.CalledAs()
 		LogWithCommand = *logrus.WithField("SubCommand", SubCommand)
@@ -48,7 +49,7 @@ This command needs a config file location specified:
 
 func init() {
 	rootCmd.AddCommand(headerSyncCmd)
-	headerSyncCmd.Flags().Int64VarP(&startingBlockNumber, "starting-block-number", "s", 0, "Block number to start syncing from")
+	headerSyncCmd.Flags().Int64VarP(&startingBlockNumber, startingBlockFlagName, "s", 0, "Block number to start syncing from")
 }
 
 func backFillAllHeaders(blockchain core.BlockChain, headerRepository datastore.HeaderRepository, missingBlocksPopulated chan int, startingBlockNumber int64) {
@@ -104,7 +105,7 @@ func validateHeaderSyncArgs(blockChain *eth.BlockChain) {
 	}
 	lastBlockNumber := lastBlock.Int64()
 	if startingBlockNumber > lastBlockNumber {
-		LogWithCommand.Fatalf("starting block number (%d) greater than client's most recent synced block (%d)",
-			startingBlockNumber, lastBlockNumber)
+		LogWithCommand.Fatalf("--%s (%d) greater than client's most recent synced block (%d)",
+			startingBlockFlagName, startingBlockNumber, lastBlockNumber)
 	}
 }

@@ -37,11 +37,11 @@ import (
 var executeCmd = &cobra.Command{
 	Use:   "execute",
 	Short: "Executes a precomposed transformer initializer plugin",
-	Long: `Run this command to take the composed plugin and pass it to the
-appropriate watcher to execute over. The plugin file needs to be located in the
-/plugins directory and this command assumes the db migrations remain from when
-the plugin was composed. Additionally, the plugin must have been composed by the
-same version of vulcanizedb or else it will not be compatible.
+	Long: `Run this command to take the composed plugin and pass it to the appropriate watcher 
+to execute over. The plugin file needs to be located in the /plugins directory 
+and this command assumes the db migrations remain from when the plugin was composed.
+Additionally, the plugin must have been composed by the same version of vulcanizedb 
+or else it will not be compatible.
 
 This command needs a config file location specified: 
 ./vulcanizedb execute --config=./environments/config_name.toml`,

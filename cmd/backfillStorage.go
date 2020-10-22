@@ -12,30 +12,37 @@ import (
 )
 
 var (
-	backfillStorageAddress          string
-	backfillStorageAddressFlag      = "backfill-storage-contract-address"
-	backfillStorageEndBlockFlag     = "backfill-storage-end-block"
-	backfillStorageEndBlockNumber   int64
-	backfillStorageStartBlockFlag   = "backfill-storage-start-block"
-	backfillStorageStartBlockNumber int64
+	backfillStorageAddress             string
+	backfillStorageAddressFlag         = "backfill-storage-contract-address"
+	backfillStorageEndBlockFlag        = "backfill-storage-end-block"
+	backfillStorageEndBlockNumber      int64
+	backfillStorageStartBlockFlag      = "backfill-storage-start-block"
+	backfillStorageStartBlockNumber    int64
+	backfillStorageContractAddressFlag = "backfill-storage-contract-address"
 )
 
 // backfillStorageCmd represents the backfillStorage command
 var backfillStorageCmd = &cobra.Command{
 	Use:   "backfillStorage",
 	Short: "Backfill smart contract storage for a range of blocks",
-	Long: `Run this command to fetch and persist contract storage for a range of blocks. Useful
-if you have started watching diffs from a new contract but do not have storage data from before
-you started running the transformer.
-Requires a config file structured the same as it would be for running compose or execute (to specify which
-addresses and storage slots must be back-filled).
-Requires CLI flags are backfill-storage-start-block (-s) and backfill-storage-end-block (-e) to define range of blocks
-that need to be back-filled.
-Optional CLI flag is backfill-storage-contract-address (-a) to specify a single contract address that needs to be
-back-filled (if not necessary for all transformers).
-Before running this command, verify that you have run headerSync and execute for the desired blocks. Headers are
-required for generating queries for storage slots by hash, and execute is required since the identifier for storage
-slots that represent mappings and dynamic arrays depend on data derived from events.`,
+	Long: fmt.Sprintf(`Run this command to fetch and persist contract storage for a range of blocks. Useful
+if you have started watching diffs from a new contract but do not have storage data
+from before you started running the transformer.
+
+   -Requires a config file structured the same as it would be for running compose or 
+    execute (to specify which addresses and storage slots must be back-filled).
+
+   -Required CLI flags are %s (-s) and 
+    %s (-e) to define range of block that need to be back-filled.
+
+   -Optional CLI flag is %s (-a) to specify a single 
+    contract address that needs to be back-filled (if not necessary for all transformers).
+
+Before running this command, verify that you have run headerSync and execute for the 
+desired blocks. Headers are required for generating queries for storage slots by hash,
+and execute is required since the identifier for storage slots that represent mappings
+and dynamic arrays depend on data derived from events.`, backfillStorageStartBlockFlag,
+		backfillStorageEndBlockFlag, backfillStorageContractAddressFlag),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		SubCommand = cmd.CalledAs()
 		LogWithCommand = *logrus.WithField("SubCommand", SubCommand)
