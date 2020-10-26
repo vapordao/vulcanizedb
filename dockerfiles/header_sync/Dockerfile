@@ -1,26 +1,12 @@
-FROM golang:alpine as builder
-
-RUN apk --update --no-cache add g++ git linux-headers
-
-ENV GO111MODULE on
+FROM makerdao/vdb-builder:latest as builder
 
 WORKDIR /vulcanizedb
 COPY . .
 RUN go build
-RUN go get -tags='no_mysql no_sqlite3 no_mssql no_redshift' github.com/pressly/goose/cmd/goose@v2.7.0-rc5
 
-FROM golang:alpine
+FROM makerdao/vdb-runner:latest as runner
 
 WORKDIR /app
-
-# add certificates for node requests via https
-# bash for wait-for-it.sh
-RUN apk update \
-        && apk upgrade \
-        && apk add --no-cache \
-        ca-certificates \
-        bash \
-        && update-ca-certificates 2>/dev/null || true
 
 # Direct logs to stdout for docker log driver
 RUN ln -sf /dev/stdout /app/vulcanizedb.log
