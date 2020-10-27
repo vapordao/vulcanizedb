@@ -225,14 +225,14 @@ func (watcher StorageWatcher) handleTransformError(transformErr error, diff type
 			if markUnrecognizedErr != nil {
 				return markUnrecognizedErr
 			}
-		}
-		if isCommonTransformError(transformErr) {
+		} else if isCommonTransformError(transformErr) {
 			logrus.Tracef("error transforming diff: %s", transformErr.Error())
 		} else {
 			logrus.Infof("error transforming diff: %s", transformErr.Error())
+			return transformErr
 		}
 	}
-	return transformErr
+	return nil
 }
 
 func isCommonTransformError(err error) bool {
