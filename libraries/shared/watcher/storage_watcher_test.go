@@ -196,7 +196,27 @@ func SharedExecuteBehavior(input *ExecuteInput) {
 			err := storageWatcher.Execute()
 
 			Expect(err).To(HaveOccurred())
-			Expect(err).To(MatchError(sql.ErrNoRows))
+			Expect(err).To(MatchError(fakes.FakeError))
+			Expect(mockDiffsRepository.MarkTransformedPassedID).NotTo(Equal(diffWithoutHeader.ID))
+		})
+
+		It("does not return sql.ErrNoRows if header for diff not found", func() {
+			diffWithoutHeader := types.PersistedDiff{
+				RawDiff: types.RawDiff{
+					Address:     contractAddress,
+					BlockHash:   test_data.FakeHash(),
+					BlockHeight: rand.Int(),
+				},
+				ID: rand.Int63(),
+			}
+			setDiffsToReturn(storageWatcher.DiffStatus, mockDiffsRepository, []types.PersistedDiff{diffWithoutHeader})
+			setGetDiffsErrors(storageWatcher.DiffStatus, mockDiffsRepository, []error{nil, fakes.FakeError})
+			mockHeaderRepository.GetHeaderByBlockNumberError = sql.ErrNoRows
+
+			err := storageWatcher.Execute()
+
+			Expect(err).To(HaveOccurred())
+			Expect(err).To(MatchError(fakes.FakeError))
 			Expect(mockDiffsRepository.MarkTransformedPassedID).NotTo(Equal(diffWithoutHeader.ID))
 		})
 
@@ -394,13 +414,23 @@ func SharedExecuteBehavior(input *ExecuteInput) {
 
 			It("marks diff as 'unrecognized' when transforming the diff returns a ErrKeyNotFound error", func() {
 				mockTransformer.ExecuteErr = types.ErrKeyNotFound
-				setGetDiffsErrors(storageWatcher.DiffStatus, mockDiffsRepository, []error{nil, types.ErrKeyNotFound})
+				setGetDiffsErrors(storageWatcher.DiffStatus, mockDiffsRepository, []error{nil, fakes.FakeError})
 
 				err := storageWatcher.Execute()
 
 				Expect(err).To(HaveOccurred())
-				Expect(err).To(MatchError(types.ErrKeyNotFound))
+				Expect(err).To(MatchError(fakes.FakeError))
 				Expect(mockDiffsRepository.MarkUnrecognizedPassedID).To(Equal(fakePersistedDiff.ID))
+			})
+
+			It("does not return ErrKeyNotFound if storage diff key not recognized", func() {
+				mockTransformer.ExecuteErr = types.ErrKeyNotFound
+				setGetDiffsErrors(storageWatcher.DiffStatus, mockDiffsRepository, []error{nil, fakes.FakeError})
+
+				err := storageWatcher.Execute()
+
+				Expect(err).To(HaveOccurred())
+				Expect(err).To(MatchError(fakes.FakeError))
 			})
 
 			It("marks diff transformed if transformer execution doesn't fail", func() {
