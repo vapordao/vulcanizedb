@@ -18,13 +18,11 @@ package fakes
 
 import (
 	"github.com/ethereum/go-ethereum/accounts/abi"
-	"github.com/makerdao/vulcanizedb/pkg/contract_watcher/types"
 )
 
 type MockParser struct {
 	AbiToReturn string
 	EventName   string
-	Event       types.Event
 }
 
 func (*MockParser) Parse(contractAddr, apiKey string) error {
@@ -42,8 +40,4 @@ func (parser *MockParser) Abi() string {
 
 func (*MockParser) ParsedAbi() abi.ABI {
 	return abi.ABI{}
-}
-
-func (parser *MockParser) GetEvents(wanted []string) map[string]types.Event {
-	return map[string]types.Event{parser.EventName: parser.Event}
 }

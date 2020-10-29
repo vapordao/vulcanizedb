@@ -66,7 +66,7 @@ func init() {
 }
 
 func executeTransformers() {
-	ethEventInitializers, ethStorageInitializers, ethContractInitializers, exportTransformersErr := exportTransformers()
+	ethEventInitializers, ethStorageInitializers, _, exportTransformersErr := exportTransformers()
 	if exportTransformersErr != nil {
 		LogWithCommand.Fatalf("SubCommand %v: exporting transformers failed: %v", SubCommand, exportTransformersErr)
 	}
@@ -112,13 +112,6 @@ func executeTransformers() {
 		wg.Add(1)
 		go watchEthStorage(&unrecognizedDiffStorageWatcher, &wg)
 	}
-
-	if len(ethContractInitializers) > 0 {
-		gw := watcher.NewContractWatcher(&db, blockChain)
-		gw.AddTransformers(ethContractInitializers)
-		wg.Add(1)
-		go watchEthContract(&gw, &wg)
-	}
 	wg.Wait()
 }
 
@@ -149,19 +142,5 @@ func watchEthStorage(w watcher.IStorageWatcher, wg *sync.WaitGroup) {
 	err := w.Execute()
 	if err != nil {
 		LogWithCommand.Fatalf("error executing storage watcher: %s", err.Error())
-	}
-}
-
-func watchEthContract(w *watcher.ContractWatcher, wg *sync.WaitGroup) {
-	defer wg.Done()
-	// Execute over the ContractTransformerInitializer set using the contract watcher
-	LogWithCommand.Info("executing contract_watcher transformers")
-	ticker := time.NewTicker(pollingInterval)
-	defer ticker.Stop()
-	for range ticker.C {
-		err := w.Execute()
-		if err != nil {
-			LogWithCommand.Errorf("error executing contract watcher: %s", err.Error())
-		}
 	}
 }
