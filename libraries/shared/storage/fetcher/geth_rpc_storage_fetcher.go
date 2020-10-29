@@ -80,7 +80,7 @@ func (fetcher GethRpcStorageFetcher) handleDiffPayload(payload filters.Payload, 
 	}
 
 	for _, account := range stateDiff.UpdatedAccounts {
-		logrus.Infof(processingDiffsLogString, len(account.Storage), common.Bytes2Hex(account.Key))
+		logrus.Debugf(processingDiffsLogString, len(account.Storage), common.Bytes2Hex(account.Key))
 		for _, accountStorage := range account.Storage {
 			rawDiff, formatErr := types.FromGethStateDiff(account, &stateDiff, accountStorage)
 			if formatErr != nil {
