@@ -48,6 +48,8 @@ func getContractAddresses() []string {
 	contracts := viper.GetStringMap("contract")
 	var addresses []string
 	for contractName := range contracts {
+		fmt.Println(contractName)
+		logrus.Info("Contract Name", contractName)
 		address := viper.GetStringMapString("contract." + contractName)["address"]
 		addresses = append(addresses, address)
 	}
@@ -72,6 +74,7 @@ func extractDiffs() {
 		logrus.Info("Using new geth patch with filters event system")
 		_, ethClient := getClients()
 		filterQuery := createFilterQuery(addressesToWatch)
+		logrus.Infof("~~~~~~~filterQuery: %+v~~~~~~~~~~~~~~~~", filterQuery)
 		stateDiffStreamer := streamer.NewEthStateChangeStreamer(ethClient, filterQuery)
 		payloadChan := make(chan filters.Payload)
 		storageFetcher = fetcher.NewGethRpcStorageFetcher(&stateDiffStreamer, payloadChan, gethStatusWriter)
