@@ -1,20 +1,10 @@
-FROM golang:alpine as builder
-
-RUN apk --update --no-cache add g++ git linux-headers
-
-ENV GO111MODULE on
+FROM makderdao/vdb-builder as builder
 
 WORKDIR /vulcanizedb
 COPY . .
 RUN go build
 
-
-FROM golang:alpine
-
-WORKDIR /app
-
-# setup environment
-ENV GO111MODULE on
+FROM makerdao/vdb-runner
 
 # Direct logs to stdout for docker log driver
 RUN ln -sf /dev/stdout /app/vulcanizedb.log
