@@ -3,7 +3,7 @@
 Contributions are welcome! Please open an Issues or Pull Request for any changes.
 
 In addition to core contributions, developers are encouraged to build their own custom transformers which
-can be run together with other custom transformers using the [composeAndExecute](../../staging/documentation/custom-transformers.md) command.
+can be run together with other custom transformers using the [compose and execute](../../staging/documentation/custom-transformers.md) commands.
 
 ## Pull Requests
 - `go fmt` is run as part of `make test` and `make integrationtest`, please make sure to check in the format changes.
