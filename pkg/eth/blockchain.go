@@ -96,7 +96,7 @@ func (blockChain *BlockChain) GetTransactions(transactionHashes []common.Hash) (
 	return blockChain.transactionConverter.ConvertRpcTransactionsToModels(transactions)
 }
 
-func (blockChain *BlockChain) LastBlock() (*big.Int, error) {
+func (blockChain *BlockChain) ChainHead() (*big.Int, error) {
 	block, err := blockChain.ethClient.HeaderByNumber(context.Background(), nil)
 	if err != nil {
 		return big.NewInt(0), err

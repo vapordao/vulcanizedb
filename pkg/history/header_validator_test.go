@@ -40,7 +40,7 @@ var _ = Describe("Header validator", func() {
 
 	It("attempts to create every header in the validation window", func() {
 		headerRepository.SetMissingBlockNumbers([]int64{})
-		blockChain.SetLastBlock(big.NewInt(3))
+		blockChain.SetChainHead(big.NewInt(3))
 		validator := history.NewHeaderValidator(blockChain, headerRepository, 2)
 
 		_, err := validator.ValidateHeaders()
@@ -50,7 +50,7 @@ var _ = Describe("Header validator", func() {
 	})
 
 	It("propagates header repository errors", func() {
-		blockChain.SetLastBlock(big.NewInt(3))
+		blockChain.SetChainHead(big.NewInt(3))
 		headerRepositoryError := errors.New("CreateOrUpdate")
 		headerRepository.SetCreateOrUpdateHeaderReturnErr(headerRepositoryError)
 		validator := history.NewHeaderValidator(blockChain, headerRepository, 2)

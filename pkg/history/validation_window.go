@@ -32,9 +32,9 @@ func (window ValidationWindow) Size() int {
 }
 
 func MakeValidationWindow(blockchain core.BlockChain, windowSize int) (ValidationWindow, error) {
-	upperBound, err := blockchain.LastBlock()
+	upperBound, err := blockchain.ChainHead()
 	if err != nil {
-		log.Error("MakeValidationWindow: error getting LastBlock: ", err)
+		log.Error("MakeValidationWindow: error getting ChainHead: ", err)
 		return ValidationWindow{}, err
 	}
 	lowerBound := upperBound.Int64() - int64(windowSize)
