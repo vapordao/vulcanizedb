@@ -30,61 +30,63 @@ var _ = Describe("Populating headers", func() {
 	var (
 		headerRepository *fakes.MockHeaderRepository
 		statusWriter     fakes.MockStatusWriter
-		validationWindow int64
+		startingBlock,
+		validationWindowSize int64
 	)
 
 	BeforeEach(func() {
 		headerRepository = fakes.NewMockHeaderRepository()
 		statusWriter = fakes.MockStatusWriter{}
-		validationWindow = 15
+		startingBlock = 1
+		validationWindowSize = 15
 	})
 
 	It("returns number of headers added", func() {
 		blockChain := fakes.NewMockBlockChain()
-		blockChain.SetChainHead(big.NewInt(2))
-		headerRepository.SetMissingBlockNumbers([]int64{2})
+		blockChain.SetChainHead(big.NewInt(startingBlock + 1))
+		headerRepository.SetMissingBlockNumbers([]int64{startingBlock + 1})
 
-		headersAdded, err := history.PopulateMissingHeaders(blockChain, headerRepository, 1, validationWindow)
+		numHeadersAdded, err := history.PopulateMissingHeaders(blockChain, headerRepository, startingBlock, validationWindowSize)
 
 		Expect(err).NotTo(HaveOccurred())
-		Expect(headersAdded).To(Equal(1))
+		Expect(numHeadersAdded).To(Equal(1))
 	})
 
 	It("adds missing headers to the db", func() {
 		blockChain := fakes.NewMockBlockChain()
-		blockChain.SetChainHead(big.NewInt(2))
-		headerRepository.SetMissingBlockNumbers([]int64{2})
+		blockChain.SetChainHead(big.NewInt(startingBlock + 1))
+		headerRepository.SetMissingBlockNumbers([]int64{startingBlock + 1})
 
-		_, err := history.PopulateMissingHeaders(blockChain, headerRepository, 1, validationWindow)
+		_, err := history.PopulateMissingHeaders(blockChain, headerRepository, startingBlock, validationWindowSize)
 
 		Expect(err).NotTo(HaveOccurred())
 		headerRepository.AssertCreateOrUpdateHeaderCallCountAndPassedBlockNumbers(1, []int64{2})
 	})
 
-	It("queries headers table for missing headers until beginning validation window (not chain head", func() {
+	It("queries headers table for missing headers until beginning validation window (not chain head)", func() {
 		blockChain := fakes.NewMockBlockChain()
-		blockChain.SetChainHead(big.NewInt(2 + validationWindow))
-		_, err := history.PopulateMissingHeaders(blockChain, headerRepository, 2, validationWindow)
+		blockChain.SetChainHead(big.NewInt(startingBlock + validationWindowSize))
+		_, err := history.PopulateMissingHeaders(blockChain, headerRepository, startingBlock, validationWindowSize)
 
 		Expect(err).NotTo(HaveOccurred())
-		Expect(headerRepository.MissingBlockNumbersPassedStartingBlock).To(Equal(int64(2)))
-		Expect(headerRepository.MissingBlockNumbersPassedEndingBlock).To(Equal(int64(2)))
+		Expect(headerRepository.MissingBlockNumbersPassedStartingBlock).To(Equal(startingBlock))
+		Expect(headerRepository.MissingBlockNumbersPassedEndingBlock).To(Equal(startingBlock))
 	})
 
 	It("doesn't query for numbers less than starting block", func() {
 		blockChain := fakes.NewMockBlockChain()
-		blockChain.SetChainHead(big.NewInt(2))
-		_, err := history.PopulateMissingHeaders(blockChain, headerRepository, 2, validationWindow)
+		blockChain.SetChainHead(big.NewInt(startingBlock))
+		_, err := history.PopulateMissingHeaders(blockChain, headerRepository, startingBlock, validationWindowSize)
 
 		Expect(err).NotTo(HaveOccurred())
-		Expect(headerRepository.MissingBlockNumbersPassedStartingBlock).To(Equal(int64(2)))
-		Expect(headerRepository.MissingBlockNumbersPassedEndingBlock).To(Equal(int64(2)))
+		Expect(headerRepository.MissingBlockNumbersPassedStartingBlock).To(Equal(startingBlock))
+		Expect(headerRepository.MissingBlockNumbersPassedEndingBlock).To(Equal(startingBlock))
 	})
 
 	It("returns early if the db is already synced up to the beginning of the validation window", func() {
 		blockChain := fakes.NewMockBlockChain()
-		blockChain.SetChainHead(big.NewInt(2))
-		headersAdded, err := history.PopulateMissingHeaders(blockChain, headerRepository, 2, validationWindow)
+		blockChain.SetChainHead(big.NewInt(startingBlock))
+		headersAdded, err := history.PopulateMissingHeaders(blockChain, headerRepository, startingBlock, validationWindowSize)
 
 		Expect(err).NotTo(HaveOccurred())
 		Expect(headersAdded).To(Equal(0))
@@ -94,7 +96,7 @@ var _ = Describe("Populating headers", func() {
 		blockChain := fakes.NewMockBlockChain()
 		blockChain.SetChainHeadError(fakes.FakeError)
 
-		_, err := history.PopulateMissingHeaders(blockChain, headerRepository, 1, validationWindow)
+		_, err := history.PopulateMissingHeaders(blockChain, headerRepository, startingBlock, validationWindowSize)
 
 		Expect(err).To(HaveOccurred())
 		Expect(err).To(MatchError(fakes.FakeError))

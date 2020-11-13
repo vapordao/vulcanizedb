@@ -57,7 +57,7 @@ func init() {
 }
 
 func backFillAllHeaders(blockchain core.BlockChain, headerRepository datastore.HeaderRepository, missingBlocksPopulated chan int, startingBlockNumber int64) {
-	populated, err := history.PopulateMissingHeaders(blockchain, headerRepository, startingBlockNumber, validationWindow)
+	populated, err := history.PopulateMissingHeaders(blockchain, headerRepository, startingBlockNumber, validationWindowSize)
 	if err != nil {
 		LogWithCommand.Errorf("backfillAllHeaders: Error populating headers: %s", err.Error())
 	}
@@ -75,7 +75,7 @@ func headerSync() error {
 	db := utils.LoadPostgres(databaseConfig, blockChain.Node())
 
 	headerRepository := repositories.NewHeaderRepository(&db)
-	validator := history.NewHeaderValidator(blockChain, headerRepository, validationWindow)
+	validator := history.NewHeaderValidator(blockChain, headerRepository, validationWindowSize)
 	missingBlocksPopulated := make(chan int)
 
 	statusWriter := fs.NewStatusWriter("/tmp/header_sync_health_check", []byte("headerSync starting\n"))
