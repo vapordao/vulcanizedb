@@ -1,4 +1,4 @@
-FROM makderdao/vdb-builder as builder
+FROM makerdao/vdb-builder as builder
 
 WORKDIR /vulcanizedb
 COPY . .
