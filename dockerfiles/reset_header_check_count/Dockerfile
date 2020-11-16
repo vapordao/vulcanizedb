@@ -6,6 +6,8 @@ RUN go build
 
 FROM makerdao/vdb-runner
 
+WORKDIR /app
+
 # Direct logs to stdout for docker log driver
 RUN ln -sf /dev/stdout /app/vulcanizedb.log
 
