@@ -103,19 +103,13 @@ VulcanizeDB's processes can be split into two categories: extracting and transfo
 
 Several commands extract raw Ethereum data to Postgres:
 - `headerSync` populates block headers into the `public.headers` table - more detail [here](documentation/data-syncing.md).
-- `execute` and `composeAndExecute` add configured event logs into the `public.event_logs` table.
+- `execute` adds configured event logs into the `public.event_logs` table.
 - `extractDiffs` pulls state diffs into the `public.storage_diff` table.
 
 ### Transforming
 Data transformation uses the raw data that has been synced into Postgres to filter out and apply transformations to specific data of interest.
-Since there are different types of data that may be useful for observing smart contracts, it follows that there are different ways to transform this data.
-We've started by categorizing this into Generic and Custom transformers:
-
-- Generic Contract Transformer: Generic contract transformation can be done using a built-in command, `contractWatcher`, which transforms contract events provided the contract's ABI is available.
-`contractWatcher` is described further [here](documentation/generic-transformer.md).
-
-- Custom Transformers: In many cases custom transformers will need to be written to provide more comprehensive coverage of contract data.
-In this case we have provided the `compose`, `execute`, and `composeAndExecute` commands for running custom transformers from external repositories.
+A collection of transformers will need to be written to provide more comprehensive coverage of contract data.
+In this case we have provided the `compose` and `execute` commands for running these transformers from external repositories.
 Documentation on how to write, build and run custom transformers as Go plugins can be found [here](documentation/custom-transformers.md).
 
 ### Tests

@@ -21,7 +21,7 @@ VulcanizeDB has shared code built out for building and plugging in event transfo
 
 The event watcher is responsible for continuously fetching and delegating chunks of logs and their associated header to the appropriate transformers.
 
-Using the `compose` or `composeAndExecute` command, event watchers can be loaded with plugin event transformers and execute over them.
+Using the `compose` then `execute` commands, event watchers can be loaded with plugin event transformers and execute over them.
 
 ### [Event Transformer](../staging/libraries/shared/transformer/event_transformer.go)
 
@@ -321,7 +321,7 @@ func (repository ExampleRepository) RecheckHeaders(startingBlockNumber int64, en
 ### EventTransformerInitializer
 
 A transformer initializer variable needs to be exported from somewhere within the transformer repository so that the transformer can be
-loaded as part of a plugin in the `compose` or `composeAndExecute` commands. It is important that this variable is named `EventTransformerInitializer` and
+loaded as part of a plugin in the `compose` command. It is important that this variable is named `EventTransformerInitializer` and
 it must be of `type EventTransformerInitializer func(db *postgres.DB) EventTransformer`.
 
 ```go
@@ -385,4 +385,4 @@ of which headers we have already filtered through for this event.
 To create a transformer for a contract event we need to create entities for unpacking the raw log, models to represent
 the final data structure, a converter to mediate this unpacking and conversion between entities to models, a repository to write
 these models to Postgres, db migrations to accommodate these models in Postgres, and a EventTransformerInitializer to export the
-configured transformer and load it as a plugin to the `compose` or `composeAndExecute` commands as described in the main readme.
+configured transformer and load it as a plugin to the `compose` command as described in the main readme.
