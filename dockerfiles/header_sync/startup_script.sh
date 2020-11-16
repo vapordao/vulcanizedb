@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 # Runs the migrations and start headerSync
 
 # Verify required args present

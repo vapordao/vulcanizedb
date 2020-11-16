@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 # Starts the resetHeaderCheckCount command
 
 # Verify required args present
