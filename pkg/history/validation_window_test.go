@@ -28,7 +28,7 @@ import (
 var _ = Describe("Validation window", func() {
 	It("creates a ValidationWindow equal to (HEAD-windowSize, HEAD)", func() {
 		blockChain := fakes.NewMockBlockChain()
-		blockChain.SetLastBlock(big.NewInt(5))
+		blockChain.SetChainHead(big.NewInt(5))
 
 		validationWindow, err := history.MakeValidationWindow(blockChain, 2)
 

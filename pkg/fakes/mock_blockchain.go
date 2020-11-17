@@ -40,8 +40,8 @@ type MockBlockChain struct {
 	fetchContractDataPassedMethod      string
 	fetchContractDataPassedMethodArgs  []interface{}
 	fetchContractDataPassedResult      interface{}
-	lastBlock                          *big.Int
-	lastBlockErr                       error
+	chainHead                          *big.Int
+	chainHeadErr                       error
 	logQuery                           ethereum.FilterQuery
 	logQueryErr                        error
 	logQueryReturnLogs                 []types.Log
@@ -60,12 +60,12 @@ func (blockChain *MockBlockChain) SetFetchContractDataErr(err error) {
 	blockChain.fetchContractDataErr = err
 }
 
-func (blockChain *MockBlockChain) SetLastBlock(blockNumber *big.Int) {
-	blockChain.lastBlock = blockNumber
+func (blockChain *MockBlockChain) SetChainHead(blockNumber *big.Int) {
+	blockChain.chainHead = blockNumber
 }
 
-func (blockChain *MockBlockChain) SetLastBlockError(err error) {
-	blockChain.lastBlockErr = err
+func (blockChain *MockBlockChain) SetChainHeadError(err error) {
+	blockChain.chainHeadErr = err
 }
 
 func (blockChain *MockBlockChain) SetGetEthLogsWithCustomQueryErr(err error) {
@@ -114,8 +114,8 @@ func (blockChain *MockBlockChain) CallContract(contractHash string, input []byte
 	return []byte{}, nil
 }
 
-func (blockChain *MockBlockChain) LastBlock() (*big.Int, error) {
-	return blockChain.lastBlock, blockChain.lastBlockErr
+func (blockChain *MockBlockChain) ChainHead() (*big.Int, error) {
+	return blockChain.chainHead, blockChain.chainHeadErr
 }
 
 type BatchGetStorageAtCall struct {

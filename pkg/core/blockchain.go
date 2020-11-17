@@ -30,7 +30,7 @@ type BlockChain interface {
 	GetHeaderByNumber(blockNumber int64) (Header, error)
 	GetHeadersByNumbers(blockNumbers []int64) ([]Header, error)
 	GetTransactions(transactionHashes []common.Hash) ([]TransactionModel, error)
-	LastBlock() (*big.Int, error)
+	ChainHead() (*big.Int, error)
 	BatchGetStorageAt(account common.Address, keys []common.Hash, blockNumber *big.Int) (map[common.Hash][]byte, error)
 	Node() Node
 }

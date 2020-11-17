@@ -17,6 +17,7 @@
 package cmd
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/makerdao/vulcanizedb/pkg/core"
@@ -43,7 +44,10 @@ CLI flags, or it will attempt to run with default values.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		SubCommand = cmd.CalledAs()
 		LogWithCommand = *logrus.WithField("SubCommand", SubCommand)
-		headerSync()
+		err := headerSync()
+		if err != nil {
+			LogWithCommand.Fatalf("error executing header sync: %s", err.Error())
+		}
 	},
 }
 
@@ -53,30 +57,31 @@ func init() {
 }
 
 func backFillAllHeaders(blockchain core.BlockChain, headerRepository datastore.HeaderRepository, missingBlocksPopulated chan int, startingBlockNumber int64) {
-	populated, err := history.PopulateMissingHeaders(blockchain, headerRepository, startingBlockNumber)
+	populated, err := history.PopulateMissingHeaders(blockchain, headerRepository, startingBlockNumber, validationWindowSize)
 	if err != nil {
-		// TODO Lots of possible errors in the call stack above. If errors occur, we still put
-		// 0 in the channel, triggering another round
-		LogWithCommand.Error("backfillAllHeaders: Error populating headers: ", err)
+		LogWithCommand.Errorf("backfillAllHeaders: Error populating headers: %s", err.Error())
 	}
 	missingBlocksPopulated <- populated
 }
 
-func headerSync() {
+func headerSync() error {
 	ticker := time.NewTicker(pollingInterval)
 	defer ticker.Stop()
 	blockChain := getBlockChain()
-	validateHeaderSyncArgs(blockChain)
+	validationErr := validateHeaderSyncArgs(blockChain)
+	if validationErr != nil {
+		return fmt.Errorf("error validating args: %w", validationErr)
+	}
 	db := utils.LoadPostgres(databaseConfig, blockChain.Node())
 
 	headerRepository := repositories.NewHeaderRepository(&db)
-	validator := history.NewHeaderValidator(blockChain, headerRepository, validationWindow)
+	validator := history.NewHeaderValidator(blockChain, headerRepository, validationWindowSize)
 	missingBlocksPopulated := make(chan int)
 
 	statusWriter := fs.NewStatusWriter("/tmp/header_sync_health_check", []byte("headerSync starting\n"))
 	writeErr := statusWriter.Write()
 	if writeErr != nil {
-		LogWithCommand.Errorf("headerSync: Error writing health check file: %s", writeErr.Error())
+		return fmt.Errorf("error writing health check file: %w", writeErr)
 	}
 
 	go backFillAllHeaders(blockChain, headerRepository, missingBlocksPopulated, startingBlockNumber)
@@ -98,14 +103,15 @@ func headerSync() {
 	}
 }
 
-func validateHeaderSyncArgs(blockChain *eth.BlockChain) {
-	lastBlock, err := blockChain.LastBlock()
+func validateHeaderSyncArgs(blockChain *eth.BlockChain) error {
+	chainHead, err := blockChain.ChainHead()
 	if err != nil {
-		LogWithCommand.Fatalf("validateHeaderSyncArgs: Error getting last block: %s", err.Error())
+		return fmt.Errorf("error getting last block from chain: %w", err)
 	}
-	lastBlockNumber := lastBlock.Int64()
+	lastBlockNumber := chainHead.Int64()
 	if startingBlockNumber > lastBlockNumber {
-		LogWithCommand.Fatalf("--%s (%d) greater than client's most recent synced block (%d)",
+		return fmt.Errorf("--%s (%d) greater than client's most recent synced block (%d)",
 			startingBlockFlagName, startingBlockNumber, lastBlockNumber)
 	}
+	return nil
 }

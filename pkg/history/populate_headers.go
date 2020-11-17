@@ -24,13 +24,14 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-func PopulateMissingHeaders(blockChain core.BlockChain, headerRepository datastore.HeaderRepository, startingBlockNumber int64) (int, error) {
-	lastBlock, err := blockChain.LastBlock()
+func PopulateMissingHeaders(blockChain core.BlockChain, headerRepository datastore.HeaderRepository, startingBlockNumber, validationWindowSize int64) (int, error) {
+	chainHead, err := blockChain.ChainHead()
 	if err != nil {
 		return 0, fmt.Errorf("error getting last block: %w", err)
 	}
 
-	blockNumbers, err := headerRepository.MissingBlockNumbers(startingBlockNumber, lastBlock.Int64())
+	lastBlock := getLastBlock(startingBlockNumber, chainHead.Int64(), validationWindowSize)
+	blockNumbers, err := headerRepository.MissingBlockNumbers(startingBlockNumber, lastBlock)
 	if err != nil {
 		return 0, fmt.Errorf("error getting missing block numbers: %s", err.Error())
 	} else if len(blockNumbers) == 0 {
@@ -58,4 +59,11 @@ func RetrieveAndUpdateHeaders(blockChain core.BlockChain, headerRepository datas
 
 func getBlockRangeString(blockRange []int64) string {
 	return fmt.Sprintf("Backfilling |%v| blocks", len(blockRange))
+}
+
+func getLastBlock(startingBlock, chainHead, validationWindow int64) int64 {
+	if chainHead-validationWindow < startingBlock {
+		return startingBlock
+	}
+	return chainHead - validationWindow
 }
