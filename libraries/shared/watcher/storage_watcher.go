@@ -96,6 +96,7 @@ func (watcher StorageWatcher) getMinDiffID() (int, error) {
 			return 0, fmt.Errorf("error getting most recent header block number: %w", getHeaderErr)
 		}
 		blockNumber := mostRecentHeaderBlockNumber - watcher.DiffBlocksFromHeadOfChain
+		logrus.Infof("getting diffs starting at block %d", blockNumber)
 		diffID, getDiffErr := watcher.StorageDiffRepository.GetFirstDiffIDForBlockHeight(blockNumber)
 		if getDiffErr != nil {
 			return 0, fmt.Errorf("error getting first diff id for block height %d: %w", blockNumber, getDiffErr)
@@ -106,7 +107,7 @@ func (watcher StorageWatcher) getMinDiffID() (int, error) {
 		diffOffset := int64(1)
 		minID = int(diffID - diffOffset)
 	}
-
+	logrus.Infof("starting diff processing at diff id %d", minID)
 	return minID, nil
 }
 
