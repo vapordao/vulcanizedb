@@ -1,89 +1,98 @@
 # Watching Contract Storage
 
-One approach VulcanizeDB takes to caching and indexing smart contracts is to ingest raw contract storage values.
-Assuming that you are running an ethereum node that is writing contract storage changes to a CSV file, VulcanizeDB can parse them and persist the results to postgres.
+Using the `extractDiffs` command VulcanizeDB can ingest raw contract storage values and store them in the `public.storage_diffs` table in postgres, allowing for transformation by the `execute` command.
 
 ## Assumptions
 
-The current approach for caching smart contract storage diffs assumes that you are running a node that is writing contract storage diffs to a CSV file.
-The CSV file is expected to have 5 columns: contract address, block hash, block number, storage key, storage value.
+We have [a branch of go-ethereum (a.k.a geth)](https://github.com/makerdao/go-ethereum) that enables running a node that provides storage diffs via a websocket, emitting them as nodes are added to the chain, and is required for using `extractDiffs`. That command will continuously read from the websocket and persist the results to postgres, in the `public.storage_diffs` table to be transformed.
 
-We have [a branch on vulcanize/parity-ethereum](https://github.com/vulcanize/parity-ethereum/tree/watch-storage-diffs) that enables running a node that writes storage diffs this way.
-
-Looking forward, we would like to isolate this assumption as much as possible.
-We may end up needing to read CSV data that is formatted differently, or reading data from a non-CSV source, and we do not want resulting changes to cascade throughout the codebase.
-
-## Shared Code
-
-VulcanizeDB has shared code for continuously reading from the CSV file written by the ethereum node and writing a parsed version of each row to postgres.
+Looking forward, we would like to eliminate this single point of failure, potentially writing the diffs to an intermediate data store in the event the socket connection is lost. Currently in the event this happens the `backfillStorage` process can be used to backfill the lost diffs.
 
 ### Storage Watcher
 
-The storage watcher is responsible for continuously delegating CSV rows to the appropriate transformer as they are being written by the ethereum node.
-It maintains a mapping of contract addresses to transformers, and will ignore storage diff rows for contract addresses that do not have a corresponding transformer.
+The `execute` command will use the storage watcher to continuously delegate entries in `public.storage_diffs` to the appropriate transformer as they are being written by the ethereum node. Entries are marked as `transformed` when the process is complete, and `unrecognized` if its key is unknown to vulcanize. `[u]nrecognized` diffs are re-checked periodically.
 
 Storage watchers can be loaded with plugin storage transformers and executed using the `compose` then `execute` commands.
 
 ### Storage Transformer
 
 The storage transformer is responsible for converting raw contract storage hex values into useful data and writing them to postgres.
-The storage transformer depends on contract-specific implementations of code capable of recognizing storage keys and writing the matching (decoded) storage value to disk.
+
+The storage transformer depends on contract-specific implementations of code capable of recognizing storage keys and writing the matching (decoded) storage value to disk. To see examples see the [maker storage transformers](https://github.com/makerdao/vdb-mcd-transformers/tree/prod/transformers/storage).
+
+
+This is the high-level Execute function. You must fill in the Transformer interface.
 
 ```golang
-func (transformer Transformer) Execute(row shared.StorageDiffRow) error {
+func (transformer Transformer) Execute(diff types.PersistedDiff) error {
 	metadata, lookupErr := transformer.StorageKeysLookup.Lookup(diff.StorageKey)
 	if lookupErr != nil {
-		return lookupErr
+		return fmt.Errorf("error getting metadata for storage key: %w", lookupErr)
 	}
-	value, decodeErr := utils.Decode(diff, metadata)
-	if decodeErr != nil {
-		return decodeErr
-	}
-	return transformer.Repository.Create(diff.BlockHeight, diff.BlockHash.Hex(), metadata, value)
+	value := storage.Decode(diff, metadata)
+	return transformer.Repository.Create(diff.ID, diff.HeaderID, metadata, value)
 }
 ```
+
 
 ## Custom Code
 
 In order to watch an additional smart contract, a developer must create three things:
 
-1. StorageKeysLoader - identify keys in the contract's storage trie, providing metadata to describe how associated values should be decoded.
+1. KeysLoader - identify keys in the contract's storage trie, providing metadata to describe how associated values should be decoded.
 1. Repository - specify how to persist a parsed version of the storage value matching the recognized storage key.
 1. Instance - create an instance of the storage transformer that uses your mappings and repository.
 
-### StorageKeysLoader
+### KeysLoader
 
-A `StorageKeysLoader` is used by the `StorageKeysLookup` object on a storage transformer.
+A `KeysLoader` is used by the `StorageKeysLookup` object on a storage transformer. You'll implement this interface.
 
-```golang
+```go
 type KeysLoader interface {
-	LoadMappings() (map[common.Hash]utils.StorageValueMetadata, error)
+	LoadMappings() (map[common.Hash]types.ValueMetadata, error)
 	SetDB(db *postgres.DB)
 }
 ```
 
 When a key is not found, the lookup object refreshes its known keys by calling the loader.
 
-```golang
+```go
 func (lookup *keysLookup) refreshMappings() error {
-	var err error
-	lookup.mappings, err = lookup.loader.LoadMappings()
+	newMappings, err := lookup.loader.LoadMappings()
 	if err != nil {
-		return err
+		return fmt.Errorf("error loading mappings: %w", err)
 	}
+	lookup.mappings = newMappings
 	return nil
 }
 ```
 
-A contract-specific implementation of the loader enables the storage transformer to fetch metadata associated with a storage key.
+A contract-specific implementation of the loader enables the storage transformer to fetch metadata associated with a storage key. Here is the version for the `flap` contract.
 
-Storage metadata contains: the name of the variable matching the storage key, a raw version of any keys associated with the variable (if the variable is a mapping), and the variable's type.
+``` go
+func (loader *keysLoader) LoadMappings() (map[common.Hash]types.ValueMetadata, error) {
+	mappings := loadStaticKeys()
+	mappings, wardsErr := loader.addWardsKeys(mappings)
+	if wardsErr != nil {
+		return nil, fmt.Errorf("error adding wards keys to flap keys loader: %w", wardsErr)
+	}
+	mappings, bidErr := loader.loadBidKeys(mappings)
+	if bidErr != nil {
+		return nil, fmt.Errorf("error adding bid keys to flap keys loader: %w", bidErr)
+	}
+	return mappings, nil
+}
+```
 
-```golang
-type StorageValueMetadata struct {
-	Name string
-	Keys map[Key]string
-	Type ValueType
+Storage metadata contains: the name of the variable matching the storage key, a raw version of any keys associated with the variable (if the variable is a mapping), the variable's type, and optional `PackedNames` and `PackedTypes`.
+
+```go
+type ValueMetadata struct {
+	Name        string
+	Keys        map[Key]string
+	Type        ValueType
+	PackedNames map[int]string    //zero indexed position in map => name of packed item
+	PackedTypes map[int]ValueType //zero indexed position in map => type of packed item
 }
 ```
 
@@ -105,9 +114,9 @@ A database connection may be desired when keys in a mapping variable need to be 
 
 ### Repository
 
-```golang
+```go
 type Repository interface {
-	Create(blockNumber int, blockHash string, metadata shared.StorageValueMetadata, value interface{}) error
+	Create(diffID, headerID int64, metadata types.ValueMetadata, value interface{}) error
 	SetDB(db *postgres.DB)
 }
 ```
@@ -117,19 +126,46 @@ A contract-specific implementation of the repository interface enables the trans
 The `Create` function is expected to recognize and persist a given storage value by the variable's name, as indicated on the row's metadata.
 Note: we advise silently discarding duplicates in `Create` - as it's possible that you may read the same diff several times.
 
-The `SetDB` function is required for the repository to connect to the database.
+The `SetDB` function is required for the repository to connect to the database. Here is another example from the `flap` contract. It's mostly calling other functions, but should give you a rough idea what `Create` would look like.
 
-### Instance
-
-```golang
-type Transformer struct {
-	Address    common.Address
-	Mappings   storage_diffs.Mappings
-	Repository storage_diffs.Repository
+``` go
+func (repository *StorageRepository) Create(diffID, headerID int64, metadata types.ValueMetadata, value interface{}) error {
+	switch metadata.Name {
+	case storage.Vat:
+		return repository.insertVat(diffID, headerID, value.(string))
+	case storage.Gem:
+		return repository.insertGem(diffID, headerID, value.(string))
+	case storage.Beg:
+		return repository.insertBeg(diffID, headerID, value.(string))
+	case storage.Kicks:
+		return repository.insertKicks(diffID, headerID, value.(string))
+	case storage.Live:
+		return repository.insertLive(diffID, headerID, value.(string))
+	case wards.Wards:
+		return wards.InsertWards(diffID, headerID, metadata, repository.ContractAddress, value.(string), repository.db)
+	case storage.BidBid:
+		return repository.insertBidBid(diffID, headerID, metadata, value.(string))
+	case storage.BidLot:
+		return repository.insertBidLot(diffID, headerID, metadata, value.(string))
+	case storage.Packed:
+		return repository.insertPackedValueRecord(diffID, headerID, metadata, value.(map[int]string))
+	default:
+		panic(fmt.Sprintf("unrecognized flap contract storage name: %s", metadata.Name))
+	}
 }
 ```
 
-A new instance of the storage transformer is initialized with the contract-specific mappings and repository, as well as the contract's address.
+### Instance
+
+```go
+type Transformer struct {
+	Address    			common.Address
+	StorageKeysLookup 	KeysLookup
+	Repository 			Repository
+}
+```
+
+A new instance of the storage transformer is initialized with the contract-specific key lookup and repository, as well as the contract's address.
 The contract's address is included so that the watcher can query that value from the transformer in order to build up its mapping of addresses to transformers.
 
 ## Summary
