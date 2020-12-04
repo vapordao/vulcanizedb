@@ -23,7 +23,7 @@ The storage transformer depends on contract-specific implementations of code cap
 
 This is the high-level Execute function. You must fill in the Transformer interface.
 
-```golang
+```go
 func (transformer Transformer) Execute(diff types.PersistedDiff) error {
 	metadata, lookupErr := transformer.StorageKeysLookup.Lookup(diff.StorageKey)
 	if lookupErr != nil {
