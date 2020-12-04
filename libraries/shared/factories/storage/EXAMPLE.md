@@ -45,7 +45,7 @@ It also emits an event each time a new address is added into the contract's stor
 
 ## Custom Code
 
-In order to monitor the state of this smart contract, we'd need to implement: an event transformer, a KeysLoader interface, and a repository. Event transformers are out of scope for this doc, but you can see the [event transformer README](PUT LINK HERE BEFORE MERGING).
+In order to monitor the state of this smart contract, we'd need to implement: an event transformer, a KeysLoader interface, and a repository. Event transformers are out of scope for this doc, but you can see the [event transformer documentation](https://github.com/makerdao/vdb-mcd-transformers/blob/prod/transformers/events/DOCUMENTATION.md).
 
 ### Mappings
 
