@@ -60,6 +60,7 @@ func backFillEvents() error {
 		}
 	}
 
+	LogWithCommand.Infof("Back-filling events for blocks %d-%d", extractor.StartingBlock, endingBlockNumber)
 	err := extractor.BackFillLogs(endingBlockNumber)
 	if err != nil {
 		return fmt.Errorf("error backfilling logs: %w", err)
