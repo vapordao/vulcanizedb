@@ -45,41 +45,31 @@ It also emits an event each time a new address is added into the contract's stor
 
 ## Custom Code
 
-In order to monitor the state of this smart contract, we'd need to implement: an event transformer, a mappings namespace, and a repository.
-We will go through each of these in turn.
-
-### Event Transformer
-
-Given that the contract's storage includes a mapping, `addresses`, we will need to be able to identify the keys to that mapping that exist in the system so that we can recognize contract storage keys that correspond to non-zero values in that mapping.
-
-The simplest way to be aware of keys used in a contract's mapping is to listen for contract events that emit the keys that are used in its mapping(s).
-Since this contract includes an event, `AddressAdded`, that is emitted each time a new address is added to the `addresses` mapping, we will want to listen for those events and cache the adddresses that map to non-zero values.
-
-Please see the event transformer README for detailed instructions about developing this code.
-In short, it should be feasible to recognize `AddressAdded` events on the blockchain and parse them to keep a record of addresses that have been added to the system.
+In order to monitor the state of this smart contract, we'd need to implement: an event transformer, a KeysLoader interface, and a repository. Event transformers are out of scope for this doc, but you can see the [event transformer documentation](https://github.com/makerdao/vdb-mcd-transformers/blob/prod/transformers/events/DOCUMENTATION.md).
 
 ### Mappings
 
-If we point an ethereum node at a blockchain hosting this contract and our node is equipped to write out storage changes happening on this contract, we will expect such changes to appear each time `add_address` (which modifies the `addresses` mapping) is called.
+If we point an ethereum node at a blockchain hosting this contract and our node is emitting storage diffs happening on this contract, we will expect such changes to appear each time `add_address` (which modifies the `addresses` mapping) is called.
 
-In order for those changes - which include raw hex versions of storage keys and storage values, to be useful for us - we need to know how to recognize and parse them.
-Our mappings file should assist us with both of these tasks: the `Lookup` function should recognize raw storage keys and return known metadata about the storage value.
+In order for those changes - which include raw hex versions of storage keys and storage values, to be useful for us - we need to know how to recognize and parse them, and we do that via the `KeysLoader` interface and the `LoadMappings` function which returns a map of key hashes to `ValueMetadata`.
 
-In order to perform this lookup, the mappings file should maintain its own mapping of known storage keys to the corresponding storage value metadata.
-This internal mapping should contain the storage key for `num_addresses` as well as a storage key for each `addresses` key known to be associated with a non-zero value.
+In this example the the mapping should contain the storage key for `num_addresses` as well as a storage key for each `addresses` key known to be associated with a non-zero value.
 
 #### num_addresses
 
 `num_addresses` is the first variable declared on the contract, and it is a simple (non-array, non-mapping) type.
 Therefore, we know that its storage key is `0000000000000000000000000000000000000000000000000000000000000000`.
+
 The storage key for non-array and non-mapping variables is (usually*) the index of the variable on the contract's storage.
+
 If we see a storage diff being emitted from this contract with this storage key, we know that the `num_addresses` variable has been modified.
 
-In this case, we would expect that the call `mappings.Lookup("0000000000000000000000000000000000000000000000000000000000000000")` would return metadata corresponding to the `num_addresses` variable.
+In this case,  we would expect that the call `mappings[common.HexToHash("0000000000000000000000000000000000000000000000000000000000000000")]` would return metadata corresponding to the `num_addresses` variable. Note the call to `common.HexToHash`. The mapping maps a hash value, and not the raw index, to the meta data so this call is necessary.
+
 This metadata would probably look something like:
 
-```golang
-shared.StorageValueMetadata{
+```go
+types.ValueMetadata{
     Name: "num_addresses",
     Keys: nil,
     Type: shared.Uint256,
@@ -94,36 +84,17 @@ shared.StorageValueMetadata{
 Since it is a mapping, the storage key is more complex than `0000000000000000000000000000000000000000000000000000000000000001` (which would be the key for the variable if it were not an array or mapping).
 Having a single storage slot for an entire mapping would not work, since there can be an arbitrary number of entries in a mapping, and a single storage value slot is constrained to 32 bytes.
 
-The way that smart contract mappings are maintained in storage (in Solidity) is by creating a new storage key/value pair for each entry in the mapping, where the storage key is a hash of the occupied slot's key concatenated with the mapping's index on the contract.
-Given an occupied slot's key, `k`, and a mapping's index on the contract, `i`, we can generate the storage key with the following code:
+The way that smart contract mappings are maintained in storage (in Solidity) is by creating a new storage key/value pair for each entry in the mapping, where the storage key is a hash of the occupied slot's key concatenated with the mapping's index on the contract.  Fortunately you do not have to manage that and can use a helper method:
 
-```golang
-func GetMappingStorageKey(k, i string) string {
-    return common.BytesToHash(crypto.Keccak256(common.FromHex(k + i))).Hex()
-}
+```go
+import (
+  ... 
+	vdbStorage "github.com/makerdao/vulcanizedb/libraries/shared/storage"
+)
+
+vdbStorage.GetKeyForMapping(addressesIndex, mappingIndex)
 ```
-
-If we were to call the contract's `add_address` function with `0xde0B295669a9FD93d5F28D9Ec85E40f4cb697BAe`, we would expect to see an `AddressAdded` event emitted, with `0xde0B295669a9FD93d5F28D9Ec85E40f4cb697BAe` in its payload.
-From that event, we would know that there exists in the contract's storage a storage key of:
-
-```golang
-GetMappingStorageKey("0xde0B295669a9FD93d5F28D9Ec85E40f4cb697BAe", "0000000000000000000000000000000000000000000000000000000000000001")
-```
-
-Executing the above code results in: `0x0f96a1133cfd5b94c329aa0526b5962bd791dbbfc481ca82f7d4a439e1e9bc40`.
-
-Therefore, the first time `add_address` was called for this address, we would also expect to see a storage diff with a key of `0x0f96a1133cfd5b94c329aa0526b5962bd791dbbfc481ca82f7d4a439e1e9bc40` and a value of `0000000000000000000000000000000000000000000000000000000000000001`.
-This would be the indication that in contract storage, the address `0xde0B295669a9FD93d5F28D9Ec85E40f4cb697BAe` maps to the value 1.
-
-Given that we knew this address was a key in the mapping from our event transformer, we would expect a call to `mappings.Lookup("0x0f96a1133cfd5b94c329aa0526b5962bd791dbbfc481ca82f7d4a439e1e9bc40")` to return metadata corresponding to _this slot_ in the addresses mapping:
-
-```golang
-shared.StorageValueMetadata{
-    Name: "addresses,
-    Keys: map[Key]string{Address: "0xde0B295669a9FD93d5F28D9Ec85E40f4cb697BAe"},
-    Type: shared.Uint256,
-}
-```
+Where addressIndex here would be `0000000000000000000000000000000000000000000000000000000000000001` and the mappingIndex would be the index into that mapping you desired.
 
 ### Repository
 
@@ -139,7 +110,7 @@ An implication of this decision is that the `Create` function typically includes
 
 An example implementation of `Create` for our example contract above might look like:
 
-```golang
+```go
 func (repository AddressStorageRepository) Create(blockNumber int, blockHash string, metadata shared.StorageValueMetadata, value interface{}) error {
     switch metadata.Name {
     case "num_addresses":
