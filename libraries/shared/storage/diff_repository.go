@@ -32,11 +32,13 @@ type DiffRepository interface {
 	MarkNoncanonical(id int64) error
 	MarkUnrecognized(id int64) error
 	MarkUnwatched(id int64) error
+	MarkPending(id int64) error
 	GetFirstDiffIDForBlockHeight(blockHeight int64) (int64, error)
 }
 
 var (
 	New          = `new`
+	Pending      = `pending`
 	Noncanonical = `noncanonical`
 	Transformed  = `transformed`
 	Unrecognized = `unrecognized`
@@ -131,6 +133,14 @@ func (repository diffRepository) MarkNoncanonical(id int64) error {
 
 func (repository diffRepository) MarkUnwatched(id int64) error {
 	_, err := repository.db.Exec(`UPDATE public.storage_diff SET status = $1 WHERE id = $2`, Unwatched, id)
+	if err != nil {
+		return fmt.Errorf("error marking diff %d checked: %w", id, err)
+	}
+	return nil
+}
+
+func (repository diffRepository) MarkPending(id int64) error {
+	_, err := repository.db.Exec(`UPDATE public.storage_diff SET status = $1 WHERE id = $2`, Pending, id)
 	if err != nil {
 		return fmt.Errorf("error marking diff %d checked: %w", id, err)
 	}

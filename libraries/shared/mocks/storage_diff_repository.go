@@ -91,6 +91,10 @@ func (repository *MockStorageDiffRepository) MarkUnwatched(id int64) error {
 	return nil
 }
 
+func (repository *MockStorageDiffRepository) MarkPending(id int64) error {
+	return nil
+}
+
 func (repository *MockStorageDiffRepository) GetFirstDiffIDForBlockHeight(blockHeight int64) (int64, error) {
 	repository.GetFirstDiffBlockHeightPassed = blockHeight
 	return repository.GetFirstDiffIDToReturn, repository.GetFirstDiffIDErr
