@@ -451,6 +451,17 @@ var _ = Describe("Storage diffs repository", func() {
 			Expect(getStatusErr).NotTo(HaveOccurred())
 			Expect(status).To(Equal(storage.Unwatched))
 		})
+
+		It("marks a diff as pending", func() {
+			err := repo.MarkPending(fakePersistedDiff.ID)
+			Expect(err).NotTo(HaveOccurred())
+
+			var status string
+			getStatusErr := db.Get(&status, `SELECT status FROM public.storage_diff WHERE id = $1`, fakePersistedDiff.ID)
+
+			Expect(getStatusErr).NotTo(HaveOccurred())
+			Expect(status).To(Equal(storage.Pending))
+		})
 	})
 
 	Describe("GetFirstDiffIDForBlockHeight", func() {
