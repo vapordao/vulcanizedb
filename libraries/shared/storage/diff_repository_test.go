@@ -27,6 +27,7 @@ import (
 	"github.com/makerdao/vulcanizedb/pkg/datastore/postgres"
 	"github.com/makerdao/vulcanizedb/test_config"
 	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
 )
 
@@ -214,190 +215,145 @@ var _ = Describe("Storage diffs repository", func() {
 		})
 	})
 
-	Describe("GetNewDiffs", func() {
-		It("sends diffs that are marked as 'new'", func() {
-			fakePersistedDiff := types.PersistedDiff{
-				RawDiff:   fakeStorageDiff,
-				ID:        rand.Int63(),
-				EthNodeID: db.NodeID,
-				Status:    storage.New,
-			}
-			insertTestDiff(fakePersistedDiff, db)
+	Describe("GetDiffs", func() {
 
-			diffs, err := repo.GetNewDiffs(0, 1)
+		SkipStatus := func(status string) TableEntry {
+			return Entry("skip", status, false)
+		}
 
-			Expect(err).NotTo(HaveOccurred())
-			Expect(diffs).To(ConsistOf(fakePersistedDiff))
-		})
+		KeepStatus := func(status string) TableEntry {
+			return Entry("keep", status, true)
+		}
 
-		It("does not sends diffs that are marked as 'unrecognized'", func() {
-			unrecognizedPersistedDiff := types.PersistedDiff{
-				RawDiff:   fakeStorageDiff,
-				ID:        rand.Int63(),
-				Status:    storage.Unrecognized,
-				EthNodeID: db.NodeID,
-			}
-			insertTestDiff(unrecognizedPersistedDiff, db)
-
-			diffs, err := repo.GetNewDiffs(0, 1)
-
-			Expect(err).NotTo(HaveOccurred())
-			Expect(diffs).To(BeEmpty())
-		})
-
-		It("does not send diffs that are marked as 'transformed'", func() {
-			transformedPersistedDiff := types.PersistedDiff{
-				RawDiff:   fakeStorageDiff,
-				ID:        rand.Int63(),
-				Status:    storage.Transformed,
-				EthNodeID: db.NodeID,
-			}
-			insertTestDiff(transformedPersistedDiff, db)
-
-			diffs, err := repo.GetNewDiffs(0, 1)
-
-			Expect(err).NotTo(HaveOccurred())
-			Expect(diffs).To(BeEmpty())
-		})
-
-		It("does not send diffs that are marked as 'noncanonical'", func() {
-			noncanonicalPersistedDiff := types.PersistedDiff{
-				RawDiff:   fakeStorageDiff,
-				ID:        rand.Int63(),
-				Status:    storage.Noncanonical,
-				EthNodeID: db.NodeID,
-			}
-			insertTestDiff(noncanonicalPersistedDiff, db)
-
-			diffs, err := repo.GetNewDiffs(0, 1)
-
-			Expect(err).NotTo(HaveOccurred())
-			Expect(diffs).To(BeEmpty())
-		})
-
-		It("enables seeking diffs with greater ID", func() {
-			blockZero := rand.Int()
-			for i := 0; i < 2; i++ {
-				fakeRawDiff := types.RawDiff{
-					Address:      test_data.FakeAddress(),
-					BlockHash:    test_data.FakeHash(),
-					BlockHeight:  blockZero + i,
-					StorageKey:   test_data.FakeHash(),
-					StorageValue: test_data.FakeHash(),
-				}
-				persistedDiff := types.PersistedDiff{
-					RawDiff:   fakeRawDiff,
+		DescribeTable("GetNewDiffs",
+			func(status string, present bool) {
+				fakePersistedDiff := types.PersistedDiff{
+					RawDiff:   fakeStorageDiff,
 					ID:        rand.Int63(),
-					Status:    storage.New,
 					EthNodeID: db.NodeID,
+					Status:    status,
 				}
-				insertTestDiff(persistedDiff, db)
-			}
+				insertTestDiff(fakePersistedDiff, db)
 
-			minID := 0
-			limit := 1
-			diffsOne, errOne := repo.GetNewDiffs(minID, limit)
-			Expect(errOne).NotTo(HaveOccurred())
-			Expect(len(diffsOne)).To(Equal(1))
-			nextID := int(diffsOne[0].ID)
-			diffsTwo, errTwo := repo.GetNewDiffs(nextID, limit)
-			Expect(errTwo).NotTo(HaveOccurred())
-			Expect(len(diffsTwo)).To(Equal(1))
-			Expect(int(diffsTwo[0].ID) > nextID).To(BeTrue())
-		})
-	})
-
-	Describe("GetUnrecognizedDiffs", func() {
-		It("sends diffs that are marked as 'unrecognized'", func() {
-			fakePersistedDiff := types.PersistedDiff{
-				RawDiff:   fakeStorageDiff,
-				ID:        rand.Int63(),
-				EthNodeID: db.NodeID,
-				Status:    "unrecognized",
-			}
-			insertTestDiff(fakePersistedDiff, db)
-
-			diffs, err := repo.GetUnrecognizedDiffs(0, 1)
-
-			Expect(err).NotTo(HaveOccurred())
-			Expect(diffs).To(ConsistOf(fakePersistedDiff))
-		})
-
-		It("does not sends diffs that are marked as 'new'", func() {
-			unrecognizedPersistedDiff := types.PersistedDiff{
-				RawDiff:   fakeStorageDiff,
-				ID:        rand.Int63(),
-				Status:    "new",
-				EthNodeID: db.NodeID,
-			}
-			insertTestDiff(unrecognizedPersistedDiff, db)
-
-			diffs, err := repo.GetUnrecognizedDiffs(0, 1)
-
-			Expect(err).NotTo(HaveOccurred())
-			Expect(diffs).To(BeEmpty())
-		})
-
-		It("does not send diffs that are marked as 'transformed'", func() {
-			transformedPersistedDiff := types.PersistedDiff{
-				RawDiff:   fakeStorageDiff,
-				ID:        rand.Int63(),
-				Status:    "transformed",
-				EthNodeID: db.NodeID,
-			}
-			insertTestDiff(transformedPersistedDiff, db)
-
-			diffs, err := repo.GetUnrecognizedDiffs(0, 1)
-
-			Expect(err).NotTo(HaveOccurred())
-			Expect(diffs).To(BeEmpty())
-		})
-
-		It("does not send diffs that are marked as 'noncanonical'", func() {
-			noncanonicalPersistedDiff := types.PersistedDiff{
-				RawDiff:   fakeStorageDiff,
-				ID:        rand.Int63(),
-				Status:    "noncanonical",
-				EthNodeID: db.NodeID,
-			}
-			insertTestDiff(noncanonicalPersistedDiff, db)
-
-			diffs, err := repo.GetUnrecognizedDiffs(0, 1)
-
-			Expect(err).NotTo(HaveOccurred())
-			Expect(diffs).To(BeEmpty())
-		})
-
-		It("enables seeking diffs with greater ID", func() {
-			blockZero := rand.Int()
-			for i := 0; i < 2; i++ {
-				fakeRawDiff := types.RawDiff{
-					Address:      test_data.FakeAddress(),
-					BlockHash:    test_data.FakeHash(),
-					BlockHeight:  blockZero + i,
-					StorageKey:   test_data.FakeHash(),
-					StorageValue: test_data.FakeHash(),
+				diffs, err := repo.GetNewDiffs(0, 1)
+				Expect(err).NotTo(HaveOccurred())
+				if present {
+					Expect(diffs).To(ConsistOf(fakePersistedDiff))
+				} else {
+					Expect(diffs).To(BeEmpty())
 				}
-				persistedDiff := types.PersistedDiff{
-					RawDiff:   fakeRawDiff,
+			},
+			KeepStatus(storage.New),
+			SkipStatus(storage.Pending),
+			SkipStatus(storage.Noncanonical),
+			SkipStatus(storage.Transformed),
+			SkipStatus(storage.Unrecognized),
+			SkipStatus(storage.Unwatched),
+		)
+
+		DescribeTable("GetPendingDiffs",
+			func(status string, present bool) {
+				fakePersistedDiff := types.PersistedDiff{
+					RawDiff:   fakeStorageDiff,
 					ID:        rand.Int63(),
-					Status:    "new",
 					EthNodeID: db.NodeID,
+					Status:    status,
 				}
-				insertTestDiff(persistedDiff, db)
-			}
+				insertTestDiff(fakePersistedDiff, db)
 
-			minID := 0
-			limit := 1
-			diffsOne, errOne := repo.GetNewDiffs(minID, limit)
-			Expect(errOne).NotTo(HaveOccurred())
-			Expect(len(diffsOne)).To(Equal(1))
-			nextID := int(diffsOne[0].ID)
-			diffsTwo, errTwo := repo.GetNewDiffs(nextID, limit)
-			Expect(errTwo).NotTo(HaveOccurred())
-			Expect(len(diffsTwo)).To(Equal(1))
-			Expect(int(diffsTwo[0].ID) > nextID).To(BeTrue())
-		})
+				diffs, err := repo.GetPendingDiffs(0, 1)
+				Expect(err).NotTo(HaveOccurred())
+				if present {
+					Expect(diffs).To(ConsistOf(fakePersistedDiff))
+				} else {
+					Expect(diffs).To(BeEmpty())
+				}
+			},
+			KeepStatus(storage.Pending),
+			SkipStatus(storage.New),
+			SkipStatus(storage.Noncanonical),
+			SkipStatus(storage.Transformed),
+			SkipStatus(storage.Unrecognized),
+			SkipStatus(storage.Unwatched),
+		)
+
+		DescribeTable("only unrecognized",
+			func(status string, present bool) {
+				fakePersistedDiff := types.PersistedDiff{
+					RawDiff:   fakeStorageDiff,
+					ID:        rand.Int63(),
+					EthNodeID: db.NodeID,
+					Status:    status,
+				}
+				insertTestDiff(fakePersistedDiff, db)
+
+				diffs, err := repo.GetUnrecognizedDiffs(0, 1)
+				Expect(err).NotTo(HaveOccurred())
+				if present {
+					Expect(diffs).To(ConsistOf(fakePersistedDiff))
+				} else {
+					Expect(diffs).To(BeEmpty())
+				}
+			},
+			KeepStatus(storage.Unrecognized),
+			SkipStatus(storage.New),
+			SkipStatus(storage.Pending),
+			SkipStatus(storage.Noncanonical),
+			SkipStatus(storage.Transformed),
+			SkipStatus(storage.Unwatched),
+		)
+
+		// Surely there is a better way for me to setup these calls
+		type queryFunc func(int, int) ([]types.PersistedDiff, error)
+
+		getNewDiffs := func(minID, limit int) ([]types.PersistedDiff, error) {
+			return repo.GetNewDiffs(minID, limit)
+		}
+
+		getPendingDiffs := func(minID, limit int) ([]types.PersistedDiff, error) {
+			return repo.GetPendingDiffs(minID, limit)
+		}
+
+		getUnrecognizedDiffs := func(minID, limit int) ([]types.PersistedDiff, error) {
+			return repo.GetUnrecognizedDiffs(minID, limit)
+		}
+
+		DescribeTable("seeking diffs with greater ID",
+			func(query queryFunc, status string) {
+				blockZero := rand.Int()
+				for i := 0; i < 2; i++ {
+					fakeRawDiff := types.RawDiff{
+						Address:      test_data.FakeAddress(),
+						BlockHash:    test_data.FakeHash(),
+						BlockHeight:  blockZero + i,
+						StorageKey:   test_data.FakeHash(),
+						StorageValue: test_data.FakeHash(),
+					}
+					persistedDiff := types.PersistedDiff{
+						RawDiff:   fakeRawDiff,
+						ID:        rand.Int63(),
+						Status:    status,
+						EthNodeID: db.NodeID,
+					}
+					insertTestDiff(persistedDiff, db)
+				}
+
+				minID := 0
+				limit := 1
+				diffsOne, errOne := query(minID, limit)
+				Expect(errOne).NotTo(HaveOccurred())
+				Expect(len(diffsOne)).To(Equal(1))
+
+				nextID := int(diffsOne[0].ID)
+				diffsTwo, errTwo := query(nextID, limit)
+				Expect(errTwo).NotTo(HaveOccurred())
+				Expect(len(diffsTwo)).To(Equal(1))
+				Expect(int(diffsTwo[0].ID) > nextID).To(BeTrue())
+			},
+			Entry("new diffs", getNewDiffs, storage.New),
+			Entry("pending diffs", getPendingDiffs, storage.Pending),
+			Entry("unrecognized diffs", getUnrecognizedDiffs, storage.Unrecognized),
+		)
 	})
 
 	Describe("Changing the diff status", func() {
