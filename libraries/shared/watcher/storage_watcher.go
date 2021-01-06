@@ -58,6 +58,7 @@ type DiffStatusToWatch int
 const (
 	New DiffStatusToWatch = iota
 	Unrecognized
+	Pending
 )
 
 func NewStorageWatcher(db *postgres.DB, backFromHeadOfChain int64, statusWriter fs.StatusWriter) StorageWatcher {

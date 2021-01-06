@@ -71,6 +71,11 @@ func (repository *MockStorageDiffRepository) GetUnrecognizedDiffs(minID, limit i
 	return repository.GetUnrecognizedDiffsToReturn, err
 }
 
+func (repository *MockStorageDiffRepository) GetPendingDiffs(minID, limit int) ([]types.PersistedDiff, error) {
+	var pendingDiffs []types.PersistedDiff
+	return pendingDiffs, nil
+}
+
 func (repository *MockStorageDiffRepository) MarkTransformed(id int64) error {
 	repository.MarkTransformedPassedID = id
 	return nil
