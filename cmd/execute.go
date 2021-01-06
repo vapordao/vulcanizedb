@@ -116,6 +116,13 @@ func executeTransformers() {
 		unrecognizedDiffStorageWatcher.AddTransformers(ethStorageInitializers)
 		wg.Add(1)
 		go watchEthStorage(&unrecognizedDiffStorageWatcher, &wg)
+
+		pendingDiffStorageHealthCheckMessage := []byte("storage watcher for pending diffs starting\n")
+		pendingDiffStatusWriter := fs.NewStatusWriter(healthCheckFile, pendingDiffStorageHealthCheckMessage)
+		pendingDiffStorageWatcher := watcher.PendingStorageWatcher(&db, newDiffBlockFromHeadOfChain, pendingDiffStatusWriter)
+		pendingDiffStorageWatcher.AddTransformers(ethStorageInitializers)
+		wg.Add(1)
+		go watchEthStorage(&pendingDiffStorageWatcher, &wg)
 	}
 	wg.Wait()
 }
