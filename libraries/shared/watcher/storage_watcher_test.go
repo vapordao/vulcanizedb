@@ -40,7 +40,7 @@ var _ = Describe("Storage Watcher", func() {
 		It("adds transformers", func() {
 			fakeAddress := fakes.FakeAddress
 			fakeTransformer := &mocks.MockStorageTransformer{Address: fakeAddress}
-			w := watcher.NewStorageWatcher(test_config.NewTestDB(test_config.NewTestNode()), -1, &statusWriter, watcher.New)
+			w := watcher.NewStorageWatcher(test_config.NewTestDB(test_config.NewTestNode()), -1, &statusWriter)
 
 			w.AddTransformers([]storage.TransformerInitializer{fakeTransformer.FakeTransformerInitializer})
 
@@ -51,7 +51,7 @@ var _ = Describe("Storage Watcher", func() {
 	Describe("Execute", func() {
 		When("a watcher is configured to watches 'new' storage diffs", func() {
 			statusWriter := fakes.MockStatusWriter{}
-			storageWatcher := watcher.NewStorageWatcher(test_config.NewTestDB(test_config.NewTestNode()), -1, &statusWriter, watcher.New)
+			storageWatcher := watcher.NewStorageWatcher(test_config.NewTestDB(test_config.NewTestNode()), -1, &statusWriter)
 			input := ExecuteInput{
 				watcher:      &storageWatcher,
 				statusWriter: &statusWriter,
@@ -61,7 +61,7 @@ var _ = Describe("Storage Watcher", func() {
 
 		When("a watcher is configured to watches 'unrecognized' storage diffs", func() {
 			statusWriter := fakes.MockStatusWriter{}
-			storageWatcher := watcher.NewStorageWatcher(test_config.NewTestDB(test_config.NewTestNode()), -1, &statusWriter, watcher.Unrecognized)
+			storageWatcher := watcher.UnrecognizedStorageWatcher(test_config.NewTestDB(test_config.NewTestNode()), -1, &statusWriter)
 			input := ExecuteInput{
 				watcher:      &storageWatcher,
 				statusWriter: &statusWriter,
