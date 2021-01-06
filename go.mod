@@ -5,7 +5,6 @@ go 1.15
 require (
 	github.com/dave/jennifer v1.3.0
 	github.com/ethereum/go-ethereum v1.9.22
-	github.com/hashicorp/golang-lru v0.5.4
 	github.com/hpcloud/tail v1.0.0
 	github.com/inconshreveable/mousetrap v1.0.0 // indirect
 	github.com/jmoiron/sqlx v1.2.0

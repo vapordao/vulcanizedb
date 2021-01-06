@@ -17,6 +17,8 @@
 package repositories
 
 import (
+	"database/sql"
+	"errors"
 	"fmt"
 
 	"github.com/jmoiron/sqlx"
@@ -73,6 +75,19 @@ func (repo headerRepository) CreateTransactionInTx(tx *sqlx.Tx, headerID int64, 
 		logrus.Error("header_repository: error inserting transaction: ", err)
 	}
 	return txId, err
+}
+
+func (repo headerRepository) DeleteHeader(blockNumber int64) error {
+	_, err := repo.GetHeaderByBlockNumber(blockNumber)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return postgres.ErrHeaderDoesNotExist
+		}
+		return err
+	}
+
+	_, deleteErr := repo.db.Exec(`DELETE FROM public.headers WHERE block_number = $1`, blockNumber)
+	return deleteErr
 }
 
 func (repo headerRepository) GetHeaderByBlockNumber(blockNumber int64) (core.Header, error) {
