@@ -67,6 +67,16 @@ var _ = Describe("Storage Watcher", func() {
 			}
 			SharedExecuteBehavior(&input)
 		})
+
+		When("a watcher is configured to watch 'pending' storage diffs", func() {
+			statusWriter := fakes.MockStatusWriter{}
+			storageWatcher := watcher.PendingStorageWatcher(test_config.NewTestDB(test_config.NewTestNode()), -1, &statusWriter)
+			input := ExecuteInput{
+				watcher:      &storageWatcher,
+				statusWriter: &statusWriter,
+			}
+			SharedExecuteBehavior(&input)
+		})
 	})
 })
 
@@ -444,6 +454,7 @@ func SharedExecuteBehavior(input *ExecuteInput) {
 				Expect(mockDiffsRepository.MarkTransformedPassedID).To(Equal(fakePersistedDiff.ID))
 			})
 		})
+
 	})
 }
 
@@ -453,6 +464,8 @@ func setGetDiffsErrors(diffStatus watcher.DiffStatusToWatch, mockDiffsRepo *mock
 		mockDiffsRepo.GetNewDiffsErrors = diffErrors
 	case watcher.Unrecognized:
 		mockDiffsRepo.GetUnrecognizedDiffsErrors = diffErrors
+	case watcher.Pending:
+		mockDiffsRepo.GetPendingDiffsErrors = diffErrors
 	}
 }
 func setDiffsToReturn(diffStatus watcher.DiffStatusToWatch, mockDiffsRepo *mocks.MockStorageDiffRepository, diffs []types.PersistedDiff) {
@@ -461,6 +474,8 @@ func setDiffsToReturn(diffStatus watcher.DiffStatusToWatch, mockDiffsRepo *mocks
 		mockDiffsRepo.GetNewDiffsToReturn = diffs
 	case watcher.Unrecognized:
 		mockDiffsRepo.GetUnrecognizedDiffsToReturn = diffs
+	case watcher.Pending:
+		mockDiffsRepo.GetPendingDiffsToReturn = diffs
 	}
 }
 
@@ -470,6 +485,8 @@ func assertGetDiffsLimits(diffStatus watcher.DiffStatusToWatch, mockDiffRepo *mo
 		Expect(mockDiffRepo.GetNewDiffsPassedLimits).To(ConsistOf(watcherLimit))
 	case watcher.Unrecognized:
 		Expect(mockDiffRepo.GetUnrecognizedDiffsPassedLimits).To(ConsistOf(watcherLimit))
+	case watcher.Pending:
+		Expect(mockDiffRepo.GetPendingDiffsPassedLimits).To(ConsistOf(watcherLimit))
 	}
 }
 
@@ -479,5 +496,7 @@ func assertGetDiffsMinIDs(diffStatus watcher.DiffStatusToWatch, mockDiffRepo *mo
 		Expect(mockDiffRepo.GetNewDiffsPassedMinIDs).To(ConsistOf(passedMinIDs))
 	case watcher.Unrecognized:
 		Expect(mockDiffRepo.GetUnrecognizedDiffsPassedMinIDs).To(ConsistOf(passedMinIDs))
+	case watcher.Pending:
+		Expect(mockDiffRepo.GetPendingDiffsPassedMinIDs).To(ConsistOf(passedMinIDs))
 	}
 }

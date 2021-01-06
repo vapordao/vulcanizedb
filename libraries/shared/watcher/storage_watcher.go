@@ -91,6 +91,21 @@ func UnrecognizedStorageWatcher(db *postgres.DB, backFromHeadOfChain int64, stat
 	}
 }
 
+func PendingStorageWatcher(db *postgres.DB, backFromHeadOfChain int64, statusWriter fs.StatusWriter) StorageWatcher {
+	headerRepository := repositories.NewHeaderRepository(db)
+	storageDiffRepository := storage.NewDiffRepository(db)
+	transformers := make(map[common.Address]storage2.ITransformer)
+	return StorageWatcher{
+		db:                        db,
+		HeaderRepository:          headerRepository,
+		AddressTransformers:       transformers,
+		StorageDiffRepository:     storageDiffRepository,
+		DiffBlocksFromHeadOfChain: backFromHeadOfChain,
+		StatusWriter:              statusWriter,
+		DiffStatus:                Pending,
+	}
+}
+
 func (watcher StorageWatcher) AddTransformers(initializers []storage2.TransformerInitializer) {
 	for _, initializer := range initializers {
 		storageTransformer := initializer(watcher.db)
@@ -119,6 +134,8 @@ func (watcher StorageWatcher) getDiffs(minID, ResultsLimit int) ([]types.Persist
 		return watcher.StorageDiffRepository.GetNewDiffs(minID, ResultsLimit)
 	case Unrecognized:
 		return watcher.StorageDiffRepository.GetUnrecognizedDiffs(minID, ResultsLimit)
+	case Pending:
+		return watcher.StorageDiffRepository.GetPendingDiffs(minID, ResultsLimit)
 	}
 	return nil, errors.New("Unrecognized diff status")
 }
