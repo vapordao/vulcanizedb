@@ -277,7 +277,7 @@ var _ = Describe("Storage diffs repository", func() {
 			SkipStatus(storage.Unwatched),
 		)
 
-		DescribeTable("only unrecognized",
+		DescribeTable("GetUnrecognizedDiffs",
 			func(status string, present bool) {
 				fakePersistedDiff := types.PersistedDiff{
 					RawDiff:   fakeStorageDiff,
