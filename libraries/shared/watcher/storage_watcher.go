@@ -247,8 +247,9 @@ func (watcher StorageWatcher) handleDiffWithInvalidHeaderHash(diff types.Persist
 	}
 	if diff.BlockHeight < int(maxBlock)-ReorgWindow {
 		return watcher.StorageDiffRepository.MarkNoncanonical(diff.ID)
+	} else {
+		return watcher.StorageDiffRepository.MarkPending(diff.ID)
 	}
-	return nil
 }
 
 func (watcher StorageWatcher) handleTransformError(transformErr error, diff types.PersistedDiff) error {

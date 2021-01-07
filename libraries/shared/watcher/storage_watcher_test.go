@@ -379,7 +379,7 @@ func SharedExecuteBehavior(input *ExecuteInput) {
 				Expect(mockDiffsRepository.MarkNoncanonicalPassedID).To(Equal(fakePersistedDiff.ID))
 			})
 
-			It("does not mark diff as 'noncanonical' if block height is within reorg window", func() {
+			It("marks diff as 'pending' if block height is within reorg window - because we aren't sure its noncanonical yet", func() {
 				mockHeaderRepository.MostRecentHeaderBlockNumber = int64(blockNumber + watcher.ReorgWindow)
 				setGetDiffsErrors(storageWatcher.DiffStatus, mockDiffsRepository, []error{nil, fakes.FakeError})
 
@@ -387,7 +387,7 @@ func SharedExecuteBehavior(input *ExecuteInput) {
 
 				Expect(err).To(HaveOccurred())
 				Expect(err).To(MatchError(fakes.FakeError))
-				Expect(mockDiffsRepository.MarkTransformedPassedID).NotTo(Equal(fakePersistedDiff.ID))
+				Expect(mockDiffsRepository.MarkPendingPassedID).To(Equal(fakePersistedDiff.ID))
 			})
 		})
 
