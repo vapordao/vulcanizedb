@@ -62,36 +62,18 @@ const (
 )
 
 func NewStorageWatcher(db *postgres.DB, backFromHeadOfChain int64, statusWriter fs.StatusWriter) StorageWatcher {
-	headerRepository := repositories.NewHeaderRepository(db)
-	storageDiffRepository := storage.NewDiffRepository(db)
-	transformers := make(map[common.Address]storage2.ITransformer)
-	return StorageWatcher{
-		db:                        db,
-		HeaderRepository:          headerRepository,
-		AddressTransformers:       transformers,
-		StorageDiffRepository:     storageDiffRepository,
-		DiffBlocksFromHeadOfChain: backFromHeadOfChain,
-		StatusWriter:              statusWriter,
-		DiffStatus:                New,
-	}
+	return createStorageWatcher(db, backFromHeadOfChain, statusWriter, New)
 }
 
 func UnrecognizedStorageWatcher(db *postgres.DB, backFromHeadOfChain int64, statusWriter fs.StatusWriter) StorageWatcher {
-	headerRepository := repositories.NewHeaderRepository(db)
-	storageDiffRepository := storage.NewDiffRepository(db)
-	transformers := make(map[common.Address]storage2.ITransformer)
-	return StorageWatcher{
-		db:                        db,
-		HeaderRepository:          headerRepository,
-		AddressTransformers:       transformers,
-		StorageDiffRepository:     storageDiffRepository,
-		DiffBlocksFromHeadOfChain: backFromHeadOfChain,
-		StatusWriter:              statusWriter,
-		DiffStatus:                Unrecognized,
-	}
+	return createStorageWatcher(db, backFromHeadOfChain, statusWriter, Unrecognized)
 }
 
 func PendingStorageWatcher(db *postgres.DB, backFromHeadOfChain int64, statusWriter fs.StatusWriter) StorageWatcher {
+	return createStorageWatcher(db, backFromHeadOfChain, statusWriter, Pending)
+}
+
+func createStorageWatcher(db *postgres.DB, backFromHeadOfChain int64, statusWriter fs.StatusWriter, diffStatus DiffStatusToWatch) StorageWatcher {
 	headerRepository := repositories.NewHeaderRepository(db)
 	storageDiffRepository := storage.NewDiffRepository(db)
 	transformers := make(map[common.Address]storage2.ITransformer)
@@ -102,7 +84,7 @@ func PendingStorageWatcher(db *postgres.DB, backFromHeadOfChain int64, statusWri
 		StorageDiffRepository:     storageDiffRepository,
 		DiffBlocksFromHeadOfChain: backFromHeadOfChain,
 		StatusWriter:              statusWriter,
-		DiffStatus:                Pending,
+		DiffStatus:                diffStatus,
 	}
 }
 
