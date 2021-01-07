@@ -334,11 +334,12 @@ func SharedExecuteBehavior(input *ExecuteInput) {
 			var (
 				blockNumber       int
 				fakePersistedDiff types.PersistedDiff
+				fakeRawDiff       types.RawDiff
 			)
 
 			BeforeEach(func() {
 				blockNumber = rand.Int()
-				fakeRawDiff := types.RawDiff{
+				fakeRawDiff = types.RawDiff{
 					Address:      contractAddress,
 					BlockHash:    test_data.FakeHash(),
 					BlockHeight:  blockNumber,
@@ -387,6 +388,23 @@ func SharedExecuteBehavior(input *ExecuteInput) {
 				Expect(err).To(HaveOccurred())
 				Expect(err).To(MatchError(fakes.FakeError))
 				Expect(mockDiffsRepository.MarkPendingPassedID).To(Equal(fakePersistedDiff.ID))
+			})
+
+			It("doesn't 're-mark' a diff as 'pending' if block height is within reorg window and it's already pending", func() {
+				fakePersistedDiff = types.PersistedDiff{
+					RawDiff: fakeRawDiff,
+					ID:      rand.Int63(),
+					Status:  "pending",
+				}
+				setDiffsToReturn(storageWatcher.DiffStatus, mockDiffsRepository, []types.PersistedDiff{fakePersistedDiff})
+				mockHeaderRepository.MostRecentHeaderBlockNumber = int64(blockNumber + watcher.ReorgWindow)
+				setGetDiffsErrors(storageWatcher.DiffStatus, mockDiffsRepository, []error{nil, fakes.FakeError})
+
+				err := storageWatcher.Execute()
+
+				Expect(err).To(HaveOccurred())
+				Expect(err).To(MatchError(fakes.FakeError))
+				Expect(mockDiffsRepository.MarkPendingPassedID).To(Equal(int64(0)))
 			})
 		})
 
