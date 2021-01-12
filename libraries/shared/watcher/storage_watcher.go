@@ -58,9 +58,22 @@ type DiffStatusToWatch int
 const (
 	New DiffStatusToWatch = iota
 	Unrecognized
+	Pending
 )
 
-func NewStorageWatcher(db *postgres.DB, backFromHeadOfChain int64, statusWriter fs.StatusWriter, diffStatusToWatch DiffStatusToWatch) StorageWatcher {
+func NewStorageWatcher(db *postgres.DB, backFromHeadOfChain int64, statusWriter fs.StatusWriter) StorageWatcher {
+	return createStorageWatcher(db, backFromHeadOfChain, statusWriter, New)
+}
+
+func UnrecognizedStorageWatcher(db *postgres.DB, backFromHeadOfChain int64, statusWriter fs.StatusWriter) StorageWatcher {
+	return createStorageWatcher(db, backFromHeadOfChain, statusWriter, Unrecognized)
+}
+
+func PendingStorageWatcher(db *postgres.DB, backFromHeadOfChain int64, statusWriter fs.StatusWriter) StorageWatcher {
+	return createStorageWatcher(db, backFromHeadOfChain, statusWriter, Pending)
+}
+
+func createStorageWatcher(db *postgres.DB, backFromHeadOfChain int64, statusWriter fs.StatusWriter, diffStatus DiffStatusToWatch) StorageWatcher {
 	headerRepository := repositories.NewHeaderRepository(db)
 	storageDiffRepository := storage.NewDiffRepository(db)
 	transformers := make(map[common.Address]storage2.ITransformer)
@@ -71,7 +84,7 @@ func NewStorageWatcher(db *postgres.DB, backFromHeadOfChain int64, statusWriter 
 		StorageDiffRepository:     storageDiffRepository,
 		DiffBlocksFromHeadOfChain: backFromHeadOfChain,
 		StatusWriter:              statusWriter,
-		DiffStatus:                diffStatusToWatch,
+		DiffStatus:                diffStatus,
 	}
 }
 
@@ -103,6 +116,8 @@ func (watcher StorageWatcher) getDiffs(minID, ResultsLimit int) ([]types.Persist
 		return watcher.StorageDiffRepository.GetNewDiffs(minID, ResultsLimit)
 	case Unrecognized:
 		return watcher.StorageDiffRepository.GetUnrecognizedDiffs(minID, ResultsLimit)
+	case Pending:
+		return watcher.StorageDiffRepository.GetPendingDiffs(minID, ResultsLimit)
 	}
 	return nil, errors.New("Unrecognized diff status")
 }
@@ -214,6 +229,8 @@ func (watcher StorageWatcher) handleDiffWithInvalidHeaderHash(diff types.Persist
 	}
 	if diff.BlockHeight < int(maxBlock)-ReorgWindow {
 		return watcher.StorageDiffRepository.MarkNoncanonical(diff.ID)
+	} else if diff.Status != storage.Pending {
+		return watcher.StorageDiffRepository.MarkPending(diff.ID)
 	}
 	return nil
 }

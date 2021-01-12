@@ -105,17 +105,24 @@ func executeTransformers() {
 	if len(ethStorageInitializers) > 0 {
 		newDiffStorageHealthCheckMessage := []byte("storage watcher for new diffs starting\n")
 		newDiffStatusWriter := fs.NewStatusWriter(healthCheckFile, newDiffStorageHealthCheckMessage)
-		newDiffStorageWatcher := watcher.NewStorageWatcher(&db, newDiffBlockFromHeadOfChain, newDiffStatusWriter, watcher.New)
+		newDiffStorageWatcher := watcher.NewStorageWatcher(&db, newDiffBlockFromHeadOfChain, newDiffStatusWriter)
 		newDiffStorageWatcher.AddTransformers(ethStorageInitializers)
 		wg.Add(1)
 		go watchEthStorage(&newDiffStorageWatcher, &wg)
 
 		unrecognizedDiffStorageHealthCheckMessage := []byte("storage watcher for unrecognized diffs starting\n")
 		unrecognizedDiffStatusWriter := fs.NewStatusWriter(healthCheckFile, unrecognizedDiffStorageHealthCheckMessage)
-		unrecognizedDiffStorageWatcher := watcher.NewStorageWatcher(&db, unrecognizedDiffBlockFromHeadOfChain, unrecognizedDiffStatusWriter, watcher.Unrecognized)
+		unrecognizedDiffStorageWatcher := watcher.UnrecognizedStorageWatcher(&db, unrecognizedDiffBlockFromHeadOfChain, unrecognizedDiffStatusWriter)
 		unrecognizedDiffStorageWatcher.AddTransformers(ethStorageInitializers)
 		wg.Add(1)
 		go watchEthStorage(&unrecognizedDiffStorageWatcher, &wg)
+
+		pendingDiffStorageHealthCheckMessage := []byte("storage watcher for pending diffs starting\n")
+		pendingDiffStatusWriter := fs.NewStatusWriter(healthCheckFile, pendingDiffStorageHealthCheckMessage)
+		pendingDiffStorageWatcher := watcher.PendingStorageWatcher(&db, newDiffBlockFromHeadOfChain, pendingDiffStatusWriter)
+		pendingDiffStorageWatcher.AddTransformers(ethStorageInitializers)
+		wg.Add(1)
+		go watchEthStorage(&pendingDiffStorageWatcher, &wg)
 	}
 	wg.Wait()
 }

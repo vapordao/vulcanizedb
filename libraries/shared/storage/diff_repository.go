@@ -28,15 +28,18 @@ type DiffRepository interface {
 	CreateBackFilledStorageValue(rawDiff types.RawDiff) error
 	GetNewDiffs(minID, limit int) ([]types.PersistedDiff, error)
 	GetUnrecognizedDiffs(minID, limit int) ([]types.PersistedDiff, error)
+	GetPendingDiffs(minID, limit int) ([]types.PersistedDiff, error)
 	MarkTransformed(id int64) error
 	MarkNoncanonical(id int64) error
 	MarkUnrecognized(id int64) error
 	MarkUnwatched(id int64) error
+	MarkPending(id int64) error
 	GetFirstDiffIDForBlockHeight(blockHeight int64) (int64, error)
 }
 
 var (
 	New          = `new`
+	Pending      = `pending`
 	Noncanonical = `noncanonical`
 	Transformed  = `transformed`
 	Unrecognized = `unrecognized`
@@ -76,31 +79,28 @@ func (repository diffRepository) CreateBackFilledStorageValue(rawDiff types.RawD
 }
 
 func (repository diffRepository) GetNewDiffs(minID, limit int) ([]types.PersistedDiff, error) {
-	var result []types.PersistedDiff
-	err := repository.db.Select(
-		&result,
-		`SELECT id, address, block_height, block_hash, storage_key, storage_value, eth_node_id, status, from_backfill
-				FROM public.storage_diff
-				WHERE status = $1 AND id > $2 ORDER BY id ASC LIMIT $3`,
-		New, minID, limit,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("error getting new storage diffs with id greater than %d: %w", minID, err)
-	}
-	return result, nil
+	return repository.getDiffsByStatus(New, minID, limit)
 }
 
 func (repository diffRepository) GetUnrecognizedDiffs(minID, limit int) ([]types.PersistedDiff, error) {
+	return repository.getDiffsByStatus(Unrecognized, minID, limit)
+}
+
+func (repository diffRepository) GetPendingDiffs(minID, limit int) ([]types.PersistedDiff, error) {
+	return repository.getDiffsByStatus(Pending, minID, limit)
+}
+
+func (repository diffRepository) getDiffsByStatus(status string, minID, limit int) ([]types.PersistedDiff, error) {
 	var result []types.PersistedDiff
 	err := repository.db.Select(
 		&result,
 		`SELECT id, address, block_height, block_hash, storage_key, storage_value, eth_node_id, status, from_backfill
 				FROM public.storage_diff
 				WHERE status = $1 AND id > $2 ORDER BY id ASC LIMIT $3`,
-		Unrecognized, minID, limit,
+		status, minID, limit,
 	)
 	if err != nil {
-		return nil, fmt.Errorf("error getting unrecognized storage diffs with id greater than %d: %w", minID, err)
+		return nil, fmt.Errorf("error getting %s storage diffs with id greater than %d: %w", status, minID, err)
 	}
 	return result, nil
 }
@@ -131,6 +131,14 @@ func (repository diffRepository) MarkNoncanonical(id int64) error {
 
 func (repository diffRepository) MarkUnwatched(id int64) error {
 	_, err := repository.db.Exec(`UPDATE public.storage_diff SET status = $1 WHERE id = $2`, Unwatched, id)
+	if err != nil {
+		return fmt.Errorf("error marking diff %d checked: %w", id, err)
+	}
+	return nil
+}
+
+func (repository diffRepository) MarkPending(id int64) error {
+	_, err := repository.db.Exec(`UPDATE public.storage_diff SET status = $1 WHERE id = $2`, Pending, id)
 	if err != nil {
 		return fmt.Errorf("error marking diff %d checked: %w", id, err)
 	}

@@ -40,7 +40,7 @@ var _ = Describe("Storage Watcher", func() {
 		It("adds transformers", func() {
 			fakeAddress := fakes.FakeAddress
 			fakeTransformer := &mocks.MockStorageTransformer{Address: fakeAddress}
-			w := watcher.NewStorageWatcher(test_config.NewTestDB(test_config.NewTestNode()), -1, &statusWriter, watcher.New)
+			w := watcher.NewStorageWatcher(test_config.NewTestDB(test_config.NewTestNode()), -1, &statusWriter)
 
 			w.AddTransformers([]storage.TransformerInitializer{fakeTransformer.FakeTransformerInitializer})
 
@@ -51,7 +51,7 @@ var _ = Describe("Storage Watcher", func() {
 	Describe("Execute", func() {
 		When("a watcher is configured to watches 'new' storage diffs", func() {
 			statusWriter := fakes.MockStatusWriter{}
-			storageWatcher := watcher.NewStorageWatcher(test_config.NewTestDB(test_config.NewTestNode()), -1, &statusWriter, watcher.New)
+			storageWatcher := watcher.NewStorageWatcher(test_config.NewTestDB(test_config.NewTestNode()), -1, &statusWriter)
 			input := ExecuteInput{
 				watcher:      &storageWatcher,
 				statusWriter: &statusWriter,
@@ -61,7 +61,17 @@ var _ = Describe("Storage Watcher", func() {
 
 		When("a watcher is configured to watches 'unrecognized' storage diffs", func() {
 			statusWriter := fakes.MockStatusWriter{}
-			storageWatcher := watcher.NewStorageWatcher(test_config.NewTestDB(test_config.NewTestNode()), -1, &statusWriter, watcher.Unrecognized)
+			storageWatcher := watcher.UnrecognizedStorageWatcher(test_config.NewTestDB(test_config.NewTestNode()), -1, &statusWriter)
+			input := ExecuteInput{
+				watcher:      &storageWatcher,
+				statusWriter: &statusWriter,
+			}
+			SharedExecuteBehavior(&input)
+		})
+
+		When("a watcher is configured to watch 'pending' storage diffs", func() {
+			statusWriter := fakes.MockStatusWriter{}
+			storageWatcher := watcher.PendingStorageWatcher(test_config.NewTestDB(test_config.NewTestNode()), -1, &statusWriter)
 			input := ExecuteInput{
 				watcher:      &storageWatcher,
 				statusWriter: &statusWriter,
@@ -325,11 +335,12 @@ func SharedExecuteBehavior(input *ExecuteInput) {
 			var (
 				blockNumber       int
 				fakePersistedDiff types.PersistedDiff
+				fakeRawDiff       types.RawDiff
 			)
 
 			BeforeEach(func() {
 				blockNumber = rand.Int()
-				fakeRawDiff := types.RawDiff{
+				fakeRawDiff = types.RawDiff{
 					Address:      contractAddress,
 					BlockHash:    test_data.FakeHash(),
 					BlockHeight:  blockNumber,
@@ -369,7 +380,7 @@ func SharedExecuteBehavior(input *ExecuteInput) {
 				Expect(mockDiffsRepository.MarkNoncanonicalPassedID).To(Equal(fakePersistedDiff.ID))
 			})
 
-			It("does not mark diff as 'noncanonical' if block height is within reorg window", func() {
+			It("marks diff as 'pending' if block height is within reorg window - because we aren't sure its noncanonical yet", func() {
 				mockHeaderRepository.MostRecentHeaderBlockNumber = int64(blockNumber + watcher.ReorgWindow)
 				setGetDiffsErrors(storageWatcher.DiffStatus, mockDiffsRepository, []error{nil, fakes.FakeError})
 
@@ -377,7 +388,24 @@ func SharedExecuteBehavior(input *ExecuteInput) {
 
 				Expect(err).To(HaveOccurred())
 				Expect(err).To(MatchError(fakes.FakeError))
-				Expect(mockDiffsRepository.MarkTransformedPassedID).NotTo(Equal(fakePersistedDiff.ID))
+				Expect(mockDiffsRepository.MarkPendingPassedID).To(Equal(fakePersistedDiff.ID))
+			})
+
+			It("doesn't 're-mark' a diff as 'pending' if block height is within reorg window and it's already pending", func() {
+				fakePersistedDiff = types.PersistedDiff{
+					RawDiff: fakeRawDiff,
+					ID:      rand.Int63(),
+					Status:  "pending",
+				}
+				setDiffsToReturn(storageWatcher.DiffStatus, mockDiffsRepository, []types.PersistedDiff{fakePersistedDiff})
+				mockHeaderRepository.MostRecentHeaderBlockNumber = int64(blockNumber + watcher.ReorgWindow)
+				setGetDiffsErrors(storageWatcher.DiffStatus, mockDiffsRepository, []error{nil, fakes.FakeError})
+
+				err := storageWatcher.Execute()
+
+				Expect(err).To(HaveOccurred())
+				Expect(err).To(MatchError(fakes.FakeError))
+				Expect(mockDiffsRepository.MarkPendingPassedID).To(Equal(int64(0)))
 			})
 		})
 
@@ -445,6 +473,7 @@ func SharedExecuteBehavior(input *ExecuteInput) {
 				Expect(mockDiffsRepository.MarkTransformedPassedID).To(Equal(fakePersistedDiff.ID))
 			})
 		})
+
 	})
 }
 
@@ -454,6 +483,8 @@ func setGetDiffsErrors(diffStatus watcher.DiffStatusToWatch, mockDiffsRepo *mock
 		mockDiffsRepo.GetNewDiffsErrors = diffErrors
 	case watcher.Unrecognized:
 		mockDiffsRepo.GetUnrecognizedDiffsErrors = diffErrors
+	case watcher.Pending:
+		mockDiffsRepo.GetPendingDiffsErrors = diffErrors
 	}
 }
 func setDiffsToReturn(diffStatus watcher.DiffStatusToWatch, mockDiffsRepo *mocks.MockStorageDiffRepository, diffs []types.PersistedDiff) {
@@ -462,6 +493,8 @@ func setDiffsToReturn(diffStatus watcher.DiffStatusToWatch, mockDiffsRepo *mocks
 		mockDiffsRepo.GetNewDiffsToReturn = diffs
 	case watcher.Unrecognized:
 		mockDiffsRepo.GetUnrecognizedDiffsToReturn = diffs
+	case watcher.Pending:
+		mockDiffsRepo.GetPendingDiffsToReturn = diffs
 	}
 }
 
@@ -471,6 +504,8 @@ func assertGetDiffsLimits(diffStatus watcher.DiffStatusToWatch, mockDiffRepo *mo
 		Expect(mockDiffRepo.GetNewDiffsPassedLimits).To(ConsistOf(watcherLimit))
 	case watcher.Unrecognized:
 		Expect(mockDiffRepo.GetUnrecognizedDiffsPassedLimits).To(ConsistOf(watcherLimit))
+	case watcher.Pending:
+		Expect(mockDiffRepo.GetPendingDiffsPassedLimits).To(ConsistOf(watcherLimit))
 	}
 }
 
@@ -480,5 +515,7 @@ func assertGetDiffsMinIDs(diffStatus watcher.DiffStatusToWatch, mockDiffRepo *mo
 		Expect(mockDiffRepo.GetNewDiffsPassedMinIDs).To(ConsistOf(passedMinIDs))
 	case watcher.Unrecognized:
 		Expect(mockDiffRepo.GetUnrecognizedDiffsPassedMinIDs).To(ConsistOf(passedMinIDs))
+	case watcher.Pending:
+		Expect(mockDiffRepo.GetPendingDiffsPassedMinIDs).To(ConsistOf(passedMinIDs))
 	}
 }

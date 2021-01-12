@@ -28,6 +28,10 @@ type MockStorageDiffRepository struct {
 	GetNewDiffsErrors                          []error
 	GetNewDiffsPassedMinIDs                    []int
 	GetNewDiffsPassedLimits                    []int
+	GetPendingDiffsToReturn                    []types.PersistedDiff
+	GetPendingDiffsErrors                      []error
+	GetPendingDiffsPassedMinIDs                []int
+	GetPendingDiffsPassedLimits                []int
 	GetUnrecognizedDiffsToReturn               []types.PersistedDiff
 	GetUnrecognizedDiffsErrors                 []error
 	GetUnrecognizedDiffsPassedMinIDs           []int
@@ -35,6 +39,7 @@ type MockStorageDiffRepository struct {
 	MarkTransformedPassedID                    int64
 	MarkUnrecognizedPassedID                   int64
 	MarkNoncanonicalPassedID                   int64
+	MarkPendingPassedID                        int64
 	MarkUnwatchedPassedID                      int64
 	GetFirstDiffIDToReturn                     int64
 	GetFirstDiffIDErr                          error
@@ -71,6 +76,16 @@ func (repository *MockStorageDiffRepository) GetUnrecognizedDiffs(minID, limit i
 	return repository.GetUnrecognizedDiffsToReturn, err
 }
 
+func (repository *MockStorageDiffRepository) GetPendingDiffs(minID, limit int) ([]types.PersistedDiff, error) {
+	repository.GetPendingDiffsPassedMinIDs = append(repository.GetPendingDiffsPassedMinIDs, minID)
+	repository.GetPendingDiffsPassedLimits = append(repository.GetPendingDiffsPassedLimits, limit)
+	err := repository.GetPendingDiffsErrors[0]
+	if len(repository.GetPendingDiffsErrors) > 1 {
+		repository.GetPendingDiffsErrors = repository.GetPendingDiffsErrors[1:]
+	}
+	return repository.GetPendingDiffsToReturn, err
+}
+
 func (repository *MockStorageDiffRepository) MarkTransformed(id int64) error {
 	repository.MarkTransformedPassedID = id
 	return nil
@@ -88,6 +103,11 @@ func (repository *MockStorageDiffRepository) MarkUnrecognized(id int64) error {
 
 func (repository *MockStorageDiffRepository) MarkUnwatched(id int64) error {
 	repository.MarkUnwatchedPassedID = id
+	return nil
+}
+
+func (repository *MockStorageDiffRepository) MarkPending(id int64) error {
+	repository.MarkPendingPassedID = id
 	return nil
 }
 
