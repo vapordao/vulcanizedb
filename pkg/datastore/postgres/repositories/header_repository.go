@@ -94,6 +94,9 @@ func (repo headerRepository) GetHeaderByBlockNumber(blockNumber int64) (core.Hea
 	var header core.Header
 	err := repo.db.Get(&header,
 		`SELECT id, block_number, hash, raw, block_timestamp FROM headers WHERE block_number = $1`, blockNumber)
+	if err == sql.ErrNoRows {
+		return header, postgres.ErrHeaderDoesNotExist
+	}
 	return header, err
 }
 

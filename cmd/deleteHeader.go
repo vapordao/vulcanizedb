@@ -1,15 +1,16 @@
 package cmd
 
 import (
-	"errors"
 	"github.com/makerdao/vulcanizedb/pkg/datastore/postgres/repositories"
 	"github.com/makerdao/vulcanizedb/utils"
 	"github.com/sirupsen/logrus"
-
 	"github.com/spf13/cobra"
 )
 
-var deleteHeaderBlockNumber int64
+var (
+	blockNumberFlagName     string = "block-number"
+	deleteHeaderBlockNumber int64
+)
 
 // deleteHeaderCmd represents the deleteHeader command
 var deleteHeaderCmd = &cobra.Command{
@@ -29,14 +30,12 @@ in the header validation window (by default, within 15 of the head of the chain)
 }
 
 func init() {
-	deleteHeaderCmd.Flags().Int64VarP(&deleteHeaderBlockNumber, "block-number", "b", -1, "block number of the header to delete")
 	rootCmd.AddCommand(deleteHeaderCmd)
+	deleteHeaderCmd.Flags().Int64VarP(&deleteHeaderBlockNumber, blockNumberFlagName, "b", -1, "block number of the header to delete")
+	deleteHeaderCmd.MarkFlagRequired(blockNumberFlagName)
 }
 
 func deleteHeader() error {
-	if deleteHeaderBlockNumber == -1 {
-		return errors.New("must pass block number for header to delete")
-	}
 	blockChain := getBlockChain()
 	db := utils.LoadPostgres(databaseConfig, blockChain.Node())
 	headerRepository := repositories.NewHeaderRepository(&db)

@@ -294,7 +294,7 @@ var _ = Describe("Block header repository", func() {
 			persistedHeader, getErr := repo.GetHeaderByBlockNumber(blockNumber)
 			Expect(persistedHeader).To(BeZero())
 			Expect(getErr).To(HaveOccurred())
-			Expect(getErr).To(MatchError(sql.ErrNoRows))
+			Expect(getErr).To(MatchError(postgres.ErrHeaderDoesNotExist))
 		})
 	})
 

@@ -236,5 +236,5 @@ func (watcher StorageWatcher) handleTransformError(transformErr error, diff type
 }
 
 func isCommonTransformError(err error) bool {
-	return errors.Is(err, sql.ErrNoRows) || errors.Is(err, types.ErrKeyNotFound)
+	return errors.Is(err, sql.ErrNoRows) || errors.Is(err, types.ErrKeyNotFound) || errors.Is(err, postgres.ErrHeaderDoesNotExist)
 }
