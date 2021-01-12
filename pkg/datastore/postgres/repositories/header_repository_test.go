@@ -25,6 +25,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/makerdao/vulcanizedb/pkg/core"
 	"github.com/makerdao/vulcanizedb/pkg/datastore"
+	"github.com/makerdao/vulcanizedb/pkg/datastore/postgres"
 	"github.com/makerdao/vulcanizedb/pkg/datastore/postgres/repositories"
 	"github.com/makerdao/vulcanizedb/pkg/fakes"
 	"github.com/makerdao/vulcanizedb/test_config"
@@ -270,6 +271,30 @@ var _ = Describe("Block header repository", func() {
 				FROM public.transactions WHERE header_id = $1`, headerID)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(len(dbTransactions)).To(Equal(1))
+		})
+	})
+
+	Describe("deleting a header", func() {
+		It("returns error if header does not exist", func() {
+			err := repo.DeleteHeader(rand.Int63())
+
+			Expect(err).To(HaveOccurred())
+			Expect(err).To(MatchError(postgres.ErrHeaderDoesNotExist))
+		})
+
+		It("deletes header if it exists", func() {
+			blockNumber := rand.Int63()
+			header := fakes.GetFakeHeader(blockNumber)
+			_, insertErr := repo.CreateOrUpdateHeader(header)
+			Expect(insertErr).NotTo(HaveOccurred())
+
+			err := repo.DeleteHeader(blockNumber)
+
+			Expect(err).NotTo(HaveOccurred())
+			persistedHeader, getErr := repo.GetHeaderByBlockNumber(blockNumber)
+			Expect(persistedHeader).To(BeZero())
+			Expect(getErr).To(HaveOccurred())
+			Expect(getErr).To(MatchError(postgres.ErrHeaderDoesNotExist))
 		})
 	})
 

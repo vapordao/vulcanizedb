@@ -10,6 +10,8 @@ const (
 	SettingNodeFailedMsg  = "unable to set db node"
 )
 
+var ErrHeaderDoesNotExist = errors.New("header does not exist")
+
 func ErrDBConnectionFailed(connectErr error) error {
 	return formatError(DbConnectionFailedMsg, connectErr.Error())
 }

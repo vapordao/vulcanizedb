@@ -78,6 +78,10 @@ func (mock *MockHeaderRepository) CreateTransactionInTx(tx *sqlx.Tx, headerID in
 	panic("implement me")
 }
 
+func (mock *MockHeaderRepository) DeleteHeader(blockNumber int64) error {
+	panic("implement me")
+}
+
 func (mock *MockHeaderRepository) GetHeaderByBlockNumber(blockNumber int64) (core.Header, error) {
 	mock.GetHeaderPassedBlockNumber = blockNumber
 	return core.Header{

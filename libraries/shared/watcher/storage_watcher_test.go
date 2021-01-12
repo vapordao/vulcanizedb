@@ -27,6 +27,7 @@ import (
 	"github.com/makerdao/vulcanizedb/libraries/shared/storage/types"
 	"github.com/makerdao/vulcanizedb/libraries/shared/test_data"
 	"github.com/makerdao/vulcanizedb/libraries/shared/watcher"
+	"github.com/makerdao/vulcanizedb/pkg/datastore/postgres"
 	"github.com/makerdao/vulcanizedb/pkg/fakes"
 	"github.com/makerdao/vulcanizedb/test_config"
 	. "github.com/onsi/ginkgo"
@@ -191,7 +192,7 @@ func SharedExecuteBehavior(input *ExecuteInput) {
 			}
 			setDiffsToReturn(storageWatcher.DiffStatus, mockDiffsRepository, []types.PersistedDiff{diffWithoutHeader})
 			setGetDiffsErrors(storageWatcher.DiffStatus, mockDiffsRepository, []error{nil, fakes.FakeError})
-			mockHeaderRepository.GetHeaderByBlockNumberError = sql.ErrNoRows
+			mockHeaderRepository.GetHeaderByBlockNumberError = postgres.ErrHeaderDoesNotExist
 
 			err := storageWatcher.Execute()
 
@@ -200,7 +201,7 @@ func SharedExecuteBehavior(input *ExecuteInput) {
 			Expect(mockDiffsRepository.MarkTransformedPassedID).NotTo(Equal(diffWithoutHeader.ID))
 		})
 
-		It("does not return sql.ErrNoRows if header for diff not found", func() {
+		It("does not return postgres.ErrHeaderDoesNotExist if header for diff not found", func() {
 			diffWithoutHeader := types.PersistedDiff{
 				RawDiff: types.RawDiff{
 					Address:     contractAddress,
@@ -211,7 +212,7 @@ func SharedExecuteBehavior(input *ExecuteInput) {
 			}
 			setDiffsToReturn(storageWatcher.DiffStatus, mockDiffsRepository, []types.PersistedDiff{diffWithoutHeader})
 			setGetDiffsErrors(storageWatcher.DiffStatus, mockDiffsRepository, []error{nil, fakes.FakeError})
-			mockHeaderRepository.GetHeaderByBlockNumberError = sql.ErrNoRows
+			mockHeaderRepository.GetHeaderByBlockNumberError = postgres.ErrHeaderDoesNotExist
 
 			err := storageWatcher.Execute()
 
